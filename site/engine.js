@@ -279,7 +279,86 @@
     return out;
   }
 
-  const api = { WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  /* ---------- sectors & news ---------- */
+
+  const NEWS_DAYS = 7, NEWS_HALF_LIFE_DAYS = 3;
+  const SECTOR_NEWS_WEIGHT = 0.30, STOCK_NEWS_WEIGHT = 0.25;
+  const SECTOR_SHRINK = 3, STOCK_SHRINK = 2;  // few headlines -> pull the tone toward neutral
+
+  /* Recency-weighted mean tone of the last NEWS_DAYS of headlines that mention any ticker in `set`. */
+  function newsStats(items, set, asOfMs) {
+    let n = 0, sw = 0, sws = 0;
+    const used = [];
+    for (const it of items) {
+      if (!it.tickers.some((t) => set.has(t))) continue;
+      const age = Math.max(0, (asOfMs - Date.parse(it.time)) / 864e5);
+      if (age > NEWS_DAYS) continue;
+      const w = Math.pow(0.5, age / NEWS_HALF_LIFE_DAYS);
+      n++; sw += w; sws += w * it.score;
+      used.push(it);
+    }
+    return { n, avg: sw > 0 ? sws / sw : 0, items: used };
+  }
+
+  function zList(v) {
+    const m = v.reduce((a, b) => a + b, 0) / v.length;
+    const sd = Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / (v.length - 1));
+    return v.map((x) => (sd > 0 ? (x - m) / sd : 0));
+  }
+
+  /* sd: {dates, sectors: {name: {etf, stocks}}, prices: {ticker: Float64Array}}; news: {generated, items}.
+     Sector score = 70% price score (chosen horizon) + 30% z-scored news tone; stock = 75% / 25%. */
+  function sectorAnalysis(sd, news, horizon = "long") {
+    const n = sd.dates.length;
+    const names = Object.keys(sd.sectors);
+    const allItems = news && Array.isArray(news.items) ? news.items : [];
+    const gen = news && news.generated ? Date.parse(news.generated.replace(" UTC", "Z").replace(" ", "T")) : NaN;
+    const asOfMs = Number.isNaN(gen) ? Date.now() : gen;
+    const hasNews = allItems.length > 0;
+
+    const table = (tickers) => {
+      const P = tickers.map((t) => sd.prices[t]);
+      const F = P.map(featuresFor);
+      const res = latestTable(tickers, P, F, n, horizon);
+      return new Map(res.rows.map((r) => [r.ticker, r]));
+    };
+    const etfRows = table(names.map((k) => sd.sectors[k].etf));
+    const stockList = [...new Set(names.flatMap((k) => sd.sectors[k].stocks))];
+    const stockRows = table(stockList);
+
+    // news per stock, z-scored across all stocks
+    const stockNews = new Map(stockList.map((t) => [t, newsStats(allItems, new Set([t]), asOfMs)]));
+    const stockZ = zList(stockList.map((t) => { const s = stockNews.get(t); return s.avg * s.n / (s.n + STOCK_SHRINK); }));
+    const stockZMap = new Map(stockList.map((t, i) => [t, stockZ[i]]));
+
+    // news per sector (ETF + its stocks pooled), z-scored across sectors
+    const secNews = names.map((k) => newsStats(allItems, new Set([sd.sectors[k].etf, ...sd.sectors[k].stocks]), asOfMs));
+    const secZ = zList(secNews.map((s) => s.avg * s.n / (s.n + SECTOR_SHRINK)));
+
+    const sectors = [];
+    names.forEach((name, i) => {
+      const spec = sd.sectors[name], etf = etfRows.get(spec.etf);
+      if (!etf) return;
+      const nz = hasNews ? secZ[i] : 0;
+      const stocks = spec.stocks.filter((t) => stockRows.has(t)).map((t) => {
+        const r = stockRows.get(t), nw = stockNews.get(t);
+        const z = hasNews ? stockZMap.get(t) : 0;
+        const latest = nw.items.slice().sort((a, b) => Date.parse(b.time) - Date.parse(a.time))[0] || null;
+        return { ...r, sector: name, priceScore: r.score, newsAvg: nw.avg, newsN: nw.n, newsZ: z,
+          final: (hasNews ? 1 - STOCK_NEWS_WEIGHT : 1) * r.score + (hasNews ? STOCK_NEWS_WEIGHT : 0) * z, headline: latest };
+      }).sort((a, b) => b.final - a.final);
+      sectors.push({
+        name, etf: spec.etf, etfRow: etf, priceScore: etf.score, newsAvg: secNews[i].avg, newsN: secNews[i].n, newsZ: nz,
+        final: (hasNews ? 1 - SECTOR_NEWS_WEIGHT : 1) * etf.score + (hasNews ? SECTOR_NEWS_WEIGHT : 0) * nz,
+        headlines: secNews[i].items.slice().sort((a, b) => Date.parse(b.time) - Date.parse(a.time)), stocks,
+      });
+    });
+    sectors.sort((a, b) => b.final - a.final);
+    sectors.forEach((s, k) => { s.rank = k + 1; });
+    return { sectors, hasNews, newsGenerated: news ? news.generated : null, asOf: sd.dates[sd.dates.length - 1] };
+  }
+
+  const api = { sectorAnalysis, newsStats, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(typeof self !== "undefined" ? self : this);

@@ -79,6 +79,31 @@ td.pos { color: var(--pos); } td.neg { color: var(--neg); }
   font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
   background: var(--card); color: var(--text); min-height: 44px;
 }
+.hero { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+.hero .kicker { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.hero h2 { margin: 2px 0 6px; font-size: 1.35rem; }
+.hero p { margin: 6px 0; font-size: .92rem; }
+.ideas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.idea { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: .85rem; font-weight: 600; }
+.idea small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.sector { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
+.sector > summary { list-style: none; padding: 12px 14px; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+.sector > summary::-webkit-details-marker { display: none; }
+.sector .s-name { font-weight: 700; }
+.sector .s-name small { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.sector .s-score { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; }
+.sector .s-meta { grid-column: 1 / -1; font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.sector .body { padding: 0 14px 14px; }
+.sector h3 { font-size: .92rem; margin: 12px 0 6px; }
+.tag { font-size: .7rem; border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; color: var(--muted); margin-left: 4px; vertical-align: 1px; }
+.tag.sug { color: var(--accent); border-color: var(--accent); }
+.news { list-style: none; margin: 0; padding: 0; font-size: .86rem; }
+.news li { display: grid; grid-template-columns: 12px 1fr; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.news li:first-child { border-top: 0; }
+.news .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-top: 6px; }
+.news .dot.up { background: var(--pos); } .news .dot.down { background: var(--neg); }
+.news a { color: var(--text); text-decoration: none; } .news a:hover { text-decoration: underline; }
+.news time { display: block; color: var(--muted); font-size: .75rem; }
 .chart { width: 100%; height: 380px; }
 .caveats { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; }
 .caveats summary { padding: 10px 0; font-weight: 600; cursor: pointer; }

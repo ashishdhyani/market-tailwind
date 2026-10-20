@@ -5,7 +5,7 @@
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  let data, dates, series, feats, benchSeries;
+  let data, dates, series, feats, benchSeries, sectorData = null, newsData = null;
   const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long" };
   let btCache = null;
 
@@ -91,15 +91,17 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
-    const tooFew = state.universe.size < 6;
+    // Sectors and About do not depend on the watchlist selection.
+    const tooFew = state.universe.size < 6 && ["rank", "chart", "bt"].includes(state.tab);
     $("warn").hidden = !tooFew;
     if (tooFew) {
       $("warn").textContent = "Select at least 6 stocks.";
-      for (const t of ["rank", "chart", "bt"]) $(`tab-${t}`).hidden = true;
+      $(`tab-${state.tab}`).hidden = true;
       return;
     }
+    if (state.tab === "sectors") renderSectors();
     if (state.tab === "rank") renderRank();
     if (state.tab === "chart") renderChart();
     if (state.tab === "bt") renderBacktest();
@@ -191,10 +193,79 @@
     $("bt-yearly").innerHTML = `<thead><tr><th>Year</th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead><tbody>${yrows}</tbody>`;
   }
 
+  /* ---------- sectors & news ---------- */
+
+  const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : "#");
+  const toneWord = (z) => (z > 0.5 ? "better than most" : z < -0.5 ? "weaker than most" : "about average");
+  const retTxt = (v) => E.pct(v, 1, true);
+  const horizonRetKey = () => ({ 5: "ret_5", 10: "ret_10", 21: "ret_21" }[E.HORIZONS[state.horizon].days] || "ret_21");
+  const horizonRetLabel = () => (E.HORIZONS[state.horizon].days ? E.HORIZONS[state.horizon].label : "1 month");
+
+  function ago(iso) {
+    const h = (Date.now() - Date.parse(iso)) / 36e5;
+    return h < 1 ? "just now" : h < 24 ? `${Math.floor(h)}h ago` : `${Math.floor(h / 24)}d ago`;
+  }
+
+  function newsList(items, max) {
+    if (!items.length) return '<p class="note">No recent headlines.</p>';
+    return `<ul class="news">${items.slice(0, max).map((it) => {
+      const d = it.score > 0.15 ? "up" : it.score < -0.15 ? "down" : "";
+      return `<li><span class="dot ${d}" title="tone ${it.score.toFixed(2)}"></span><span><a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>`
+        + `<time>${esc(ago(it.time))} · ${esc(it.tickers.slice(0, 4).join(", "))}</time></span></li>`;
+    }).join("")}</ul>`;
+  }
+
+  function renderSectors() {
+    if (!sectorData) {
+      $("sector-hero").innerHTML = "";
+      $("sector-list").innerHTML = '<p class="notice">Sector data is not available yet. It is created by the daily refresh job.</p>';
+      return;
+    }
+    const res = E.sectorAnalysis(sectorData, newsData, state.horizon);
+    const rk = horizonRetKey(), rl = horizonRetLabel();
+    $("sector-note").textContent = res.hasNews
+      ? `Ranked by ${E.HORIZONS[state.horizon].blurb} of the sector ETF (70%) and news tone over the last 7 days (30%). Prices as of ${res.asOf}.`
+      : `No news file found, so sectors are ranked on price alone. Prices as of ${res.asOf}.`;
+
+    const top = res.sectors[0], picks = top.stocks.slice(0, 3);
+    const why = `${top.etf} ${retTxt(top.etfRow[rk])} over ${rl.toLowerCase()}, ${top.etfRow.trend_label.toLowerCase()}`
+      + (res.hasNews ? `; headline tone ${toneWord(top.newsZ)} (${top.newsN} headlines)` : "");
+    $("sector-hero").innerHTML = `<div class="hero"><div class="kicker">Strongest sector right now</div>`
+      + `<h2>${esc(top.name)}</h2><p>${esc(why)}.</p>`
+      + `<div class="ideas"><span class="idea">${esc(top.etf)}<small>ETF</small></span>`
+      + picks.map((r) => `<span class="idea">${esc(r.ticker)}<small>${retTxt(r[rk])}</small></span>`).join("") + `</div></div>`;
+
+    $("sector-list").innerHTML = res.sectors.map((s) => {
+      const rows = s.stocks.map((r, i) => `<tr><td>${esc(r.ticker)}${i < 3 ? '<span class="tag sug">suggested</span>' : ""}</td><td>${num(r.price)}</td>`
+        + `<td class="${cls(r.ret_5)}">${retTxt(r.ret_5)}</td><td class="${cls(r.ret_21)}">${retTxt(r.ret_21)}</td>`
+        + `<td>${esc(r.trend_label)}</td><td>${res.hasNews ? esc(toneWord(r.newsZ)) : "n/a"}</td><td>${num(r.final)}</td></tr>`).join("");
+      const e = s.etfRow;
+      const etfRow = `<tr><td>${esc(s.etf)}<span class="tag">ETF</span></td><td>${num(e.price)}</td><td class="${cls(e.ret_5)}">${retTxt(e.ret_5)}</td>`
+        + `<td class="${cls(e.ret_21)}">${retTxt(e.ret_21)}</td><td>${esc(e.trend_label)}</td><td>${res.hasNews ? esc(toneWord(s.newsZ)) : "n/a"}</td><td>${num(s.final)}</td></tr>`;
+      return `<details class="sector" ${s.rank === 1 ? "open" : ""}><summary>`
+        + `<span class="s-name">${s.rank}. ${esc(s.name)}<small>${esc(s.etf)}</small></span><span class="s-score">${num(s.final)}</span>`
+        + `<span class="s-meta"><span class="${cls(e[rk])}">${retTxt(e[rk])} ${esc(rl.toLowerCase())}</span><span>${esc(e.trend_label)}</span>`
+        + (res.hasNews ? `<span>News: ${esc(toneWord(s.newsZ))} · ${s.newsN} headlines</span>` : "") + `</span></summary>`
+        + `<div class="body"><h3>Ideas in ${esc(s.name)}</h3><div class="table-wrap"><table><thead><tr><th>Ticker</th><th>Price</th><th>1 week</th><th>1 month</th><th>Trend</th><th>News</th><th>Score</th></tr></thead>`
+        + `<tbody>${etfRow}${rows}</tbody></table></div>`
+        + (res.hasNews ? `<h3>Latest headlines</h3>${newsList(s.headlines, 6)}` : "") + `</div></details>`;
+    }).join("");
+  }
+
   /* ---------- boot ---------- */
 
-  fetch("data.json", { cache: "no-cache" })
-    .then((r) => { if (!r.ok) throw new Error(`data.json: HTTP ${r.status}`); return r.json(); })
-    .then(setup)
+  const getJson = (url, optional) => fetch(url, { cache: "no-cache" })
+    .then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.json(); })
+    .catch((err) => { if (!optional) throw err; console.warn(err); return null; });
+
+  Promise.all([getJson("data.json"), getJson("sector_data.json", true), getJson("news.json", true)])
+    .then(([d, sd, news]) => {
+      if (sd) {
+        for (const t of Object.keys(sd.prices)) sd.prices[t] = toArray(sd.prices[t]);
+        sectorData = sd;
+      }
+      if (news && Array.isArray(news.items)) { newsData = news; $("news-generated").textContent = news.generated; }
+      setup(d);
+    })
     .catch((err) => { $("status").textContent = "Could not load price data: " + err.message; console.error(err); });
 })();

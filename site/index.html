@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Invest Lab">
+<meta name="apple-mobile-web-app-title" content="Tailwind">
 <meta name="theme-color" content="#0f766e">
-<meta name="description" content="Ranks US and Singapore stocks by momentum, trend and risk, and backtests the ranking. Research tool, not financial advice.">
-<title>Investment Ideas Lab</title>
+<meta name="description" content="Market Tailwind: finds the US sectors with momentum and good news behind them, ranks stocks by momentum, trend and risk, and backtests the ranking. Research tool, not financial advice.">
+<title>Market Tailwind</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f766e'/%3E%3Cpath d='M18 70 40 46 55 58 82 28' fill='none' stroke='white' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top">
-  <h1>Investment Ideas Lab</h1>
-  <p class="sub">Momentum + trend + risk ranking, checked with a backtest. A research tool, not financial advice.</p>
+  <h1>Market Tailwind</h1>
+  <p class="sub">Which sectors have the wind at their back? Price momentum + daily news tone, plus stock rankings checked with a backtest. A research tool, not financial advice.</p>
 </header>
 
 <main id="app" hidden>
@@ -45,6 +45,7 @@
 
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="rank" aria-selected="true">Rankings</button>
+    <button role="tab" data-tab="sectors" aria-selected="false">Sectors &amp; News</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
     <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
     <button role="tab" data-tab="about" aria-selected="false">About</button>
@@ -55,6 +56,13 @@
     <ol id="picks" class="picks"></ol>
     <div class="table-wrap"><table id="rank-table"></table></div>
     <p class="note">Prices are in each stock's local currency (USD / SGD). The score only ranks stocks against each other; it does not say any of them is a good buy.</p>
+  </section>
+
+  <section id="tab-sectors" class="panel" hidden>
+    <div id="sector-hero"></div>
+    <p id="sector-note" class="note"></p>
+    <div id="sector-list"></div>
+    <p class="note">US-listed stocks and ETFs only, prices in USD. This is a ranking of recent price strength and headline tone, not a forecast: nobody can reliably predict which sector will do best. Tone is a simple word count over headline text, so it misses sarcasm and context.</p>
   </section>
 
   <section id="tab-chart" class="panel" hidden>
@@ -83,12 +91,13 @@
 
   <section id="tab-about" class="panel" hidden>
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
+    <p><b>Sectors &amp; News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and six large stocks in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks and the sector ETF are the suggestions.</p>
     <p><b>Horizons:</b> <i>Long-term</i> is the model above. <i>1 month</i>, <i>2 weeks</i> and <i>1 week</i> replace both momentum terms (55% together) with the return over just that recent window; trend, volatility and closeness to the 1-year high stay the same. Short windows chase what moved most recently, which is noisy and often partly reverses, so treat them as watch-list ideas and compare them on the Backtest tab.</p>
     <p><b>Backtest:</b> rebalanced on the last trading day of each month (Long-term, 1 month), every second week (2 weeks) or every week (1 week), matching the horizon you picked. The trade fills one trading day later, so the signal never sees prices it could not have acted on. Shorter horizons trade more often, so trading costs matter much more.</p>
     <p><b>Next steps:</b> add fundamentals (SEC EDGAR), news sentiment (Finnhub free tier + FinBERT) and macro data (FRED) as extra features, then re-run the backtest to see if they help.</p>
   </section>
 
-  <footer>Prices from Yahoo Finance, refreshed daily. Last update: <span id="generated"></span>. Past performance does not predict future returns.</footer>
+  <footer>Prices and headlines from Yahoo Finance, refreshed on weekdays. Prices updated: <span id="generated"></span>. News updated: <span id="news-generated">n/a</span>. Past performance does not predict future returns.</footer>
 </main>
 
 <p id="status" class="status">Loading prices…</p>

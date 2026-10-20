@@ -9,7 +9,7 @@ import time
 import pandas as pd
 import yfinance as yf
 
-from settings import BENCHMARKS, DB_PATH, START_DATE, WATCHLIST
+from settings import BENCHMARKS, DB_PATH, SECTOR_TICKERS, START_DATE, WATCHLIST
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS prices (
@@ -42,7 +42,7 @@ def fetch(ticker: str, start: str = START_DATE) -> pd.DataFrame:
 
 def update(tickers=None, pause: float = 0.5):
     """Refresh tickers (default: watchlist + benchmarks). Returns (ok, failed)."""
-    tickers = list(tickers) if tickers else sorted(set(WATCHLIST) | set(BENCHMARKS))
+    tickers = list(tickers) if tickers else sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
     conn = connect()
     ok, failed = [], []
     for t in tickers:

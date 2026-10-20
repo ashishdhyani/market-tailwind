@@ -1,17 +1,17 @@
-# Investment Ideas Lab (free stack)
+# Market Tailwind
 
-Ranks a watchlist of US and Singapore stocks by momentum, trend and risk, and backtests
-the ranking. Uses only free data (Yahoo Finance via `yfinance`).
+Finds the US sectors with momentum and good news behind them (and suggests stocks and ETFs in them), ranks a
+watchlist of US and Singapore stocks by momentum, trend and risk, and backtests the ranking. Uses only free data (Yahoo Finance via `yfinance`).
 
 ## Web version (GitHub Pages, works on iPhone)
 
 `site/` is a static web app: the scoring and backtest (`site/engine.js`) run in the browser on
 `site/data.json`. A GitHub Action (`.github/workflows/pages.yml`) refreshes that file from Yahoo
-Finance every weekday and republishes the site. If Yahoo blocks the refresh, the last good data is kept.
+Finance every weekday (prices via `data.py` / `export_web.py`, headlines via `news.py`) and republishes the site. If Yahoo blocks the refresh, the last good data is kept.
 
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
-- Refresh data locally: `python data.py && python export_web.py`
-- Check the JS port against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json`
+- Refresh data locally: `python data.py && python export_web.py && python news.py`
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`)
 
 ## Python / Streamlit version (original)
 
@@ -35,7 +35,8 @@ streamlit run app.py      # open the dashboard
 | `scoring.py` | Features and composite score, plus the "why" text for each pick. |
 | `backtest.py` | Monthly rebalance, next-day fills, costs, benchmark comparison. |
 | `app.py` | Streamlit dashboard. |
-| `export_web.py` | Export prices from SQLite to `site/data.json`. |
+| `export_web.py` | Export prices from SQLite to `site/data.json` and `site/sector_data.json`. |
+| `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
 ## Caveats
