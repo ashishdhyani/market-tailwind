@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Invest Lab">
+<meta name="theme-color" content="#0f766e">
+<meta name="description" content="Ranks US and Singapore stocks by momentum, trend and risk, and backtests the ranking. Research tool, not financial advice.">
+<title>Investment Ideas Lab</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f766e'/%3E%3Cpath d='M18 70 40 46 55 58 82 28' fill='none' stroke='white' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Investment Ideas Lab</h1>
+  <p class="sub">Momentum + trend + risk ranking, checked with a backtest. A research tool, not financial advice.</p>
+</header>
+
+<main id="app" hidden>
+  <details class="controls" id="controls">
+    <summary>Controls <span id="ctl-summary"></span></summary>
+    <div class="ctl-body">
+      <label class="slider">Number of picks (top N): <b id="topn-val"></b>
+        <input id="topn" type="range" min="3" max="15" value="5">
+      </label>
+      <label class="slider">Trading cost per side: <b id="cost-val"></b> bps
+        <input id="cost" type="range" min="0" max="50" value="10">
+      </label>
+      <div class="uni-head">
+        <span>Universe (<b id="uni-count"></b>)</span>
+        <span><button type="button" id="uni-all" class="link">All</button> · <button type="button" id="uni-none" class="link">None</button></span>
+      </div>
+      <div id="chips" class="chips"></div>
+    </div>
+  </details>
+
+  <div id="warn" class="notice" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="rank" aria-selected="true">Rankings</button>
+    <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
+    <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
+    <button role="tab" data-tab="about" aria-selected="false">About</button>
+  </nav>
+
+  <section id="tab-rank" class="panel">
+    <h2 id="rank-title"></h2>
+    <ol id="picks" class="picks"></ol>
+    <div class="table-wrap"><table id="rank-table"></table></div>
+    <p class="note">Prices are in each stock's local currency (USD / SGD). The score only ranks stocks against each other; it does not say any of them is a good buy.</p>
+  </section>
+
+  <section id="tab-chart" class="panel" hidden>
+    <label class="select">Ticker <select id="ticker"></select></label>
+    <div id="price-chart" class="chart"></div>
+  </section>
+
+  <section id="tab-bt" class="panel" hidden>
+    <div id="bt-chart" class="chart"></div>
+    <h2>Performance</h2>
+    <div class="table-wrap"><table id="bt-metrics"></table></div>
+    <h2>Calendar-year returns</h2>
+    <div class="table-wrap"><table id="bt-yearly"></table></div>
+    <details class="caveats">
+      <summary>Read before trusting these numbers</summary>
+      <ul>
+        <li><b>Survivorship bias:</b> the watchlist is today's large, successful companies, so past results look better than a real investor could have achieved.</li>
+        <li><b>Costs are simplified:</b> flat basis points per side, no taxes, no slippage.</li>
+        <li><b>Mixed currencies:</b> US and SG stocks are ranked on local-currency returns.</li>
+        <li><b>Few years, few stocks:</b> differences of a few percent are noise.</li>
+        <li>A good backtest does not predict future returns.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section id="tab-about" class="panel" hidden>
+    <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
+    <p><b>Backtest:</b> rebalanced monthly on the last trading day; the trade fills one trading day later, so the signal never sees prices it could not have acted on.</p>
+    <p><b>Next steps:</b> add fundamentals (SEC EDGAR), news sentiment (Finnhub free tier + FinBERT) and macro data (FRED) as extra features, then re-run the backtest to see if they help.</p>
+  </section>
+
+  <footer>Prices from Yahoo Finance, refreshed daily. Last update: <span id="generated"></span>. Past performance does not predict future returns.</footer>
+</main>
+
+<p id="status" class="status">Loading prices…</p>
+
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

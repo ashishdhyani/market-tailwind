@@ -1,0 +1,249 @@
+/* Scoring + backtest. A line-for-line port of scoring.py and backtest.py (pandas semantics:
+   NaN propagates, rolling windows need every value, std uses ddof=1). Works in the browser
+   and in Node (for the cross-check against the Python version). */
+(function (root) {
+  "use strict";
+
+  const WEIGHTS = { mom_12_1: 0.35, mom_6_1: 0.20, trend: 0.20, low_vol: 0.15, near_high: 0.10 };
+  const TRADING_DAYS = 252;
+
+  const nan = (n) => new Float64Array(n).fill(NaN);
+
+  function shift(a, k) {
+    const o = nan(a.length);
+    for (let i = k; i < a.length; i++) o[i] = a[i - k];
+    return o;
+  }
+
+  function pctChange(a) {
+    const o = nan(a.length);
+    for (let i = 1; i < a.length; i++) o[i] = a[i] / a[i - 1] - 1;
+    return o;
+  }
+
+  // Generic trailing window; `fn` gets (array, endIndex, window) and only runs when the
+  // whole window is valid (pandas min_periods == window).
+  function rolling(a, w, fn) {
+    const o = nan(a.length);
+    let bad = 0;
+    for (let i = 0; i < a.length; i++) {
+      if (Number.isNaN(a[i])) bad++;
+      if (i >= w && Number.isNaN(a[i - w])) bad--;
+      if (i >= w - 1 && bad === 0) o[i] = fn(a, i, w);
+    }
+    return o;
+  }
+
+  const mean = (a, i, w) => { let s = 0; for (let k = i - w + 1; k <= i; k++) s += a[k]; return s / w; };
+  const max = (a, i, w) => { let m = -Infinity; for (let k = i - w + 1; k <= i; k++) if (a[k] > m) m = a[k]; return m; };
+  const std = (a, i, w) => {
+    const m = mean(a, i, w);
+    let s = 0;
+    for (let k = i - w + 1; k <= i; k++) s += (a[k] - m) * (a[k] - m);
+    return Math.sqrt(s / (w - 1));
+  };
+
+  /* Features for one price series, each value at t using only data up to t. */
+  function featuresFor(p) {
+    const n = p.length;
+    const s21 = shift(p, 21), s126 = shift(p, 126), s252 = shift(p, 252);
+    const sma50 = rolling(p, 50, mean), sma200 = rolling(p, 200, mean);
+    const hi = rolling(p, 252, max);
+    const vol = rolling(pctChange(p), 63, std);
+    const f = { mom_12_1: nan(n), mom_6_1: nan(n), trend: nan(n), vol_63d: nan(n), drawdown_1y: nan(n) };
+    for (let i = 0; i < n; i++) {
+      f.mom_12_1[i] = s21[i] / s252[i] - 1;
+      f.mom_6_1[i] = s21[i] / s126[i] - 1;
+      if (!Number.isNaN(sma200[i]) && !Number.isNaN(p[i])) {
+        f.trend[i] = (p[i] > sma200[i] ? 1 : 0) + (sma50[i] > sma200[i] ? 1 : 0);
+      }
+      f.vol_63d[i] = vol[i] * Math.sqrt(TRADING_DAYS);
+      f.drawdown_1y[i] = p[i] / hi[i] - 1;
+    }
+    return f;
+  }
+
+  /* Cross-sectional z-score per date over the given columns, clipped to +-3.
+     A lone valid value (or an all-equal day) is neutral 0, not missing. */
+  function zScore(cols, n) {
+    const z = cols.map(() => nan(n));
+    for (let i = 0; i < n; i++) {
+      let cnt = 0, sum = 0;
+      for (const c of cols) if (!Number.isNaN(c[i])) { cnt++; sum += c[i]; }
+      if (cnt === 0) continue;
+      const m = sum / cnt;
+      let ss = 0;
+      for (const c of cols) if (!Number.isNaN(c[i])) ss += (c[i] - m) * (c[i] - m);
+      const sd = cnt > 1 ? Math.sqrt(ss / (cnt - 1)) : NaN;
+      cols.forEach((c, j) => {
+        if (Number.isNaN(c[i])) return;
+        const v = sd > 0 ? (c[i] - m) / sd : 0;
+        z[j][i] = Math.max(-3, Math.min(3, v));
+      });
+    }
+    return z;
+  }
+
+  /* feats: array (one per ticker) of featuresFor() results. Returns one score series per ticker.
+     A score is missing if any component is missing (NaN propagates, like the pandas sum). */
+  function scores(feats, n) {
+    const zs = {
+      mom_12_1: zScore(feats.map((f) => f.mom_12_1), n),
+      mom_6_1: zScore(feats.map((f) => f.mom_6_1), n),
+      trend: zScore(feats.map((f) => f.trend), n),
+      low_vol: zScore(feats.map((f) => f.vol_63d), n),
+      near_high: zScore(feats.map((f) => f.drawdown_1y), n),
+    };
+    return feats.map((_, j) => {
+      const s = nan(n);
+      for (let i = 0; i < n; i++) {
+        s[i] = WEIGHTS.mom_12_1 * zs.mom_12_1[j][i] + WEIGHTS.mom_6_1 * zs.mom_6_1[j][i]
+          + WEIGHTS.trend * zs.trend[j][i] - WEIGHTS.low_vol * zs.low_vol[j][i]
+          + WEIGHTS.near_high * zs.near_high[j][i];
+      }
+      return s;
+    });
+  }
+
+  const TREND_LABEL = { 2: "Strong uptrend", 1: "Mixed trend", 0: "Downtrend" };
+
+  /* Ranked snapshot on the most recent date with any score. */
+  function latestTable(tickers, prices, feats, n) {
+    const sc = scores(feats, n);
+    let d = -1;
+    for (let i = n - 1; i >= 0 && d < 0; i--) if (sc.some((s) => !Number.isNaN(s[i]))) d = i;
+    if (d < 0) throw new Error("Not enough price history yet (need about 1 year per stock).");
+    const rows = [];
+    tickers.forEach((t, j) => {
+      if (Number.isNaN(sc[j][d])) return;
+      rows.push({
+        ticker: t, price: prices[j][d], score: sc[j][d],
+        mom_12_1: feats[j].mom_12_1[d], mom_6_1: feats[j].mom_6_1[d],
+        trend: feats[j].trend[d], trend_label: TREND_LABEL[feats[j].trend[d]],
+        vol_63d: feats[j].vol_63d[d], drawdown_1y: feats[j].drawdown_1y[d],
+      });
+    });
+    rows.sort((a, b) => b.score - a.score);
+    rows.forEach((r, k) => { r.rank = k + 1; });
+    return { rows, asofIndex: d };
+  }
+
+  /* Python-style "{:+.0%}" / "{:.0%}". */
+  function pct(v, digits = 0, plus = false) {
+    const s = (v * 100).toFixed(digits) + "%";
+    return plus && v >= 0 ? "+" + s : s;
+  }
+
+  function explain(r) {
+    return `12-1m momentum ${pct(r.mom_12_1, 0, true)}, 6-1m ${pct(r.mom_6_1, 0, true)}; `
+      + `${r.trend_label.toLowerCase()}; volatility ${pct(r.vol_63d)}; `
+      + `${pct(r.drawdown_1y)} from 1-year high`;
+  }
+
+  /* ---------- backtest ---------- */
+
+  function rebalanceIdx(dates) {
+    const last = new Map();
+    dates.forEach((d, i) => last.set(d.slice(0, 7), i));
+    return [...last.values()].sort((a, b) => a - b);
+  }
+
+  // target[i] is a weight vector (decided at date i) or null. Mirrors _simulate().
+  function simulate(target, rets, costBps, lag) {
+    const n = target.length, m = rets.length;
+    const held = []; // weights held after each date's decision (forward-filled)
+    let cur = new Float64Array(m);
+    for (let i = 0; i < n; i++) { if (target[i]) cur = target[i]; held.push(cur); }
+    const zero = new Float64Array(m);
+    const pos = (i) => (i - (1 + lag) >= 0 ? held[i - (1 + lag)] : zero);
+
+    const net = new Float64Array(n), turn = new Float64Array(n), live = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const p = pos(i), q = i === 0 ? zero : pos(i - 1);
+      let t = 0, g = 0, a = 0;
+      for (let j = 0; j < m; j++) { t += Math.abs(p[j] - q[j]); g += p[j] * rets[j][i]; a += Math.abs(p[j]); }
+      turn[i] = t;
+      net[i] = g - t * costBps / 1e4;
+      live[i] = a > 0;
+    }
+    const start = live.indexOf(true);
+    if (start < 0) throw new Error("No trades were generated; need more price history.");
+    return { net: net.subarray(start), turnover: turn.subarray(start), start };
+  }
+
+  function perfStats(r) {
+    let eq = 1, peak = 1, mdd = 0, sum = 0;
+    for (const x of r) { eq *= 1 + x; peak = Math.max(peak, eq); mdd = Math.min(mdd, eq / peak - 1); sum += x; }
+    const mu = sum / r.length;
+    let ss = 0;
+    for (const x of r) ss += (x - mu) * (x - mu);
+    const years = r.length / TRADING_DAYS;
+    const vol = Math.sqrt(ss / (r.length - 1)) * Math.sqrt(TRADING_DAYS);
+    return {
+      "Total return": eq - 1,
+      "CAGR": years > 0 ? Math.pow(eq, 1 / years) - 1 : NaN,
+      "Volatility": vol,
+      "Sharpe": vol > 0 ? (mu * TRADING_DAYS) / vol : NaN,
+      "Max drawdown": mdd,
+    };
+  }
+
+  /* prices/feats: per-ticker arrays for the chosen universe; bench: {name: Float64Array}. */
+  function runBacktest(dates, prices, feats, bench, topN, costBps, lag = 1) {
+    const n = dates.length, m = prices.length;
+    const rets = prices.map((p) => pctChange(p).map((x) => (Number.isNaN(x) ? 0 : x)));
+    const sc = scores(feats, n);
+
+    const tgtTop = new Array(n).fill(null), tgtAll = new Array(n).fill(null);
+    for (const d of rebalanceIdx(dates)) {
+      const valid = [];
+      for (let j = 0; j < m; j++) if (!Number.isNaN(sc[j][d])) valid.push(j);
+      if (valid.length < Math.max(topN, 2)) continue;
+      const w = new Float64Array(m);
+      [...valid].sort((a, b) => sc[b][d] - sc[a][d] || a - b).slice(0, topN).forEach((j) => { w[j] = 1 / topN; });
+      tgtTop[d] = w;
+      const a = new Float64Array(m);
+      valid.forEach((j) => { a[j] = 1 / valid.length; });
+      tgtAll[d] = a;
+    }
+
+    const strat = simulate(tgtTop, rets, costBps, lag);
+    const ew = simulate(tgtAll, rets, costBps, lag);
+    const start = strat.start, len = n - start;
+    const series = {};
+    series[`Top ${topN} by score`] = strat.net;
+    series["Equal-weight universe"] = ew.net.subarray(start - ew.start);
+
+    for (const [name, p] of Object.entries(bench)) {
+      const filled = Float64Array.from(p);
+      for (let i = 1; i < n; i++) if (Number.isNaN(filled[i])) filled[i] = filled[i - 1];
+      const r = new Float64Array(len);
+      for (let i = 1; i < len; i++) {
+        const x = filled[start + i] / filled[start + i - 1] - 1;
+        r[i] = Number.isNaN(x) ? 0 : x;
+      }
+      series[`${name} (buy & hold)`] = r;
+    }
+
+    const bdates = dates.slice(start);
+    const years = [...new Set(bdates.map((d) => d.slice(0, 4)))];
+    const out = { dates: bdates, equity: {}, metrics: {}, yearly: { years, values: {} } };
+    for (const [name, r] of Object.entries(series)) {
+      const eq = new Float64Array(len);
+      let v = 1;
+      for (let i = 0; i < len; i++) { v *= 1 + r[i]; eq[i] = v; }
+      out.equity[name] = eq;
+      out.metrics[name] = perfStats(r);
+      const prod = {};
+      for (let i = 0; i < len; i++) { const y = bdates[i].slice(0, 4); prod[y] = (prod[y] ?? 1) * (1 + r[i]); }
+      out.yearly.values[name] = years.map((y) => prod[y] - 1);
+    }
+    const yrs = len / TRADING_DAYS;
+    out.metrics[`Top ${topN} by score`]["Annual turnover"] = strat.turnover.reduce((a, b) => a + b, 0) / 2 / yrs;
+    return out;
+  }
+
+  const api = { WEIGHTS, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  else root.Engine = api;
+})(typeof self !== "undefined" ? self : this);
