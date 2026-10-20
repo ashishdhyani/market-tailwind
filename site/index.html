@@ -63,7 +63,8 @@
 
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="rank" aria-selected="true">Rankings</button>
-    <button role="tab" data-tab="sectors" aria-selected="false">Sectors &amp; News</button>
+    <button role="tab" data-tab="sectors" aria-selected="false">Sectors</button>
+    <button role="tab" data-tab="news" aria-selected="false">News</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
     <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
     <button role="tab" data-tab="about" aria-selected="false">About</button>
@@ -82,6 +83,16 @@
     <p id="sector-note" class="note"></p>
     <div id="sector-list"></div>
     <p class="note">US-listed stocks and ETFs only, prices in USD. This is a ranking of recent price strength and headline tone, not a forecast: nobody can reliably predict which sector will do best. Tone is a simple word count over headline text, so it misses sarcasm and context.</p>
+  </section>
+
+  <section id="tab-news" class="panel" hidden>
+    <h2>US market today</h2>
+    <p id="mkt-mood" class="note"></p>
+    <ul id="mkt-news" class="articles"></ul>
+    <h2>News by sector</h2>
+    <p class="note">Pick a sector to read the headlines behind its ranking. They are exactly the ones counted in the sector's news score, most influential first. Tap a headline to read its summary.</p>
+    <div id="sec-chips" class="chips"></div>
+    <div id="sec-news"></div>
   </section>
 
   <section id="tab-chart" class="panel" hidden>
@@ -110,7 +121,7 @@
 
   <section id="tab-about" class="panel" hidden>
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
-    <p><b>Sectors &amp; News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and six large stocks in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks and the sector ETF are the suggestions.</p>
+    <p><b>Sectors and News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and six large stocks in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks and the sector ETF are the suggestions. The News tab lists the headlines behind each sector, ranked by impact: a headline's impact is its share of the sector's total tone signal (newer and stronger-toned headlines count more). Market-wide headlines at the top of the News tab are for context only and are not part of any score.</p>
     <p><b>Horizons:</b> <i>Long-term</i> is the model above. <i>1 month</i>, <i>2 weeks</i> and <i>1 week</i> replace both momentum terms (55% together) with the return over just that recent window; trend, volatility and closeness to the 1-year high stay the same. Short windows chase what moved most recently, which is noisy and often partly reverses, so treat them as watch-list ideas and compare them on the Backtest tab.</p>
     <p><b>Backtest:</b> rebalanced on the last trading day of each month (Long-term, 1 month), every second week (2 weeks) or every week (1 week), matching the horizon you picked. The trade fills one trading day later, so the signal never sees prices it could not have acted on. Shorter horizons trade more often, so trading costs matter much more.</p>
     <p><b>Next steps:</b> add fundamentals (SEC EDGAR), news sentiment (Finnhub free tier + FinBERT) and macro data (FRED) as extra features, then re-run the backtest to see if they help.</p>

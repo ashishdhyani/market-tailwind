@@ -38,3 +38,6 @@ SECTORS = {
     "Utilities":              {"etf": "XLU",  "stocks": ["NEE", "SO", "DUK", "CEG", "AEP", "SRE"]},
 }
 SECTOR_TICKERS = sorted({t for s in SECTORS.values() for t in [s["etf"], *s["stocks"]]})
+
+# Index feeds whose headlines are shown as "US market" news (context only; not part of any score).
+MARKET_FEEDS = ["^GSPC", "^DJI", "^IXIC"]  # S&P 500, Dow, Nasdaq

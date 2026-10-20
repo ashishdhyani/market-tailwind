@@ -9,7 +9,7 @@
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set() };
   const secCache = {};
   let picksCtx = null;
-  const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long" };
+  const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -71,6 +71,14 @@
     $("topn").oninput = (e) => { state.topN = +e.target.value; render(); };
     $("cost").oninput = (e) => { state.cost = +e.target.value; render(); };
     $("ticker").onchange = (e) => { state.ticker = e.target.value; renderChart(); };
+    $("sec-chips").addEventListener("click", (e) => {
+      const b = e.target.closest(".chip");
+      if (b) { state.newsSector = b.dataset.sec; renderNews(); }
+    });
+    $("sector-list").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-news]");
+      if (b) { state.newsSector = b.dataset.news; state.tab = "news"; render(); window.scrollTo(0, 0); }
+    });
     // <details> "toggle" does not bubble, so listen in the capture phase (once, here).
     $("picks").addEventListener("toggle", (e) => {
       const det = e.target;
@@ -103,7 +111,7 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "sectors", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "news", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
     const tooFew = state.universe.size < 6 && ["rank", "chart", "bt"].includes(state.tab);
@@ -114,6 +122,7 @@
       return;
     }
     if (state.tab === "sectors") renderSectors();
+    if (state.tab === "news") renderNews();
     if (state.tab === "rank") renderRank();
     if (state.tab === "chart") renderChart();
     if (state.tab === "bt") renderBacktest();
@@ -353,9 +362,71 @@
         + (res.hasNews ? `<span>News: ${esc(toneWord(s.newsZ))} · ${s.newsN} headlines</span>` : "") + `</span></summary>`
         + `<div class="body"><h3>Ideas in ${esc(s.name)}</h3><div class="table-wrap"><table data-sector="${esc(s.name)}"><thead><tr><th>Stock</th><th>Price</th><th>1 week</th><th>1 month</th><th>Fwd P/E</th><th>Trend</th><th>News</th><th>Score</th></tr></thead>`
         + `<tbody>${etfRow}${rows}</tbody></table></div>`
-        + (res.hasNews ? `<h3>Latest headlines</h3>${newsList(s.headlines, 6)}` : "") + `</div></details>`;
+        + (res.hasNews ? `<h3>Latest headlines</h3>${newsList(s.headlines, 6)}<button type="button" class="link" data-news="${esc(s.name)}">Read all ${esc(s.name)} news in the News tab →</button>` : "") + `</div></details>`;
     }).join("");
     document.querySelectorAll("#sector-list table").forEach((tb) => wireExpandable(tb, openRows.sec, (t) => detailFor(t, "sector")));
+  }
+
+  /* ---------- news tab ---------- */
+
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
+  const newsAsOf = () => {
+    const g = newsData ? Date.parse(newsData.generated.replace(" UTC", "Z").replace(" ", "T")) : NaN;
+    return Number.isNaN(g) ? Date.now() : g;
+  };
+
+  /* One headline: tap to read its summary right here. `o`: { impact, lift, sug (Set of suggested tickers) }. */
+  function articleHtml(it, o = {}) {
+    const d = it.score > 0.15 ? "up" : it.score < -0.15 ? "down" : "";
+    const tks = (it.tickers || []).slice(0, 5).map((t) => `<span class="tk${o.sug && o.sug.has(t) ? " sug" : ""}">${esc(t)}</span>`).join("");
+    const infl = o.impact != null
+      ? `<span class="infl ${o.lift > 0 ? "up" : o.lift < 0 ? "down" : ""}">${o.lift > 0 ? "▲" : o.lift < 0 ? "▼" : "●"} ${(o.impact * 100).toFixed(1)}%</span>` : "";
+    const body = it.summary ? `<p>${esc(it.summary)}</p>` : '<p class="muted">No summary available.</p>';
+    return `<li><details class="art"><summary><span class="dot ${d}"></span><span class="a-main"><span class="a-title">${esc(it.title)}</span>`
+      + `<span class="a-meta">${esc(ago(it.time))}${hostOf(it.url) ? " · " + esc(hostOf(it.url)) : ""} ${tks}</span></span>${infl}</summary>`
+      + `<div class="a-body">${body}<a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer">Read the full article ↗</a></div></details></li>`;
+  }
+
+  function renderNews() {
+    if (!newsData || !newsData.items.length) {
+      $("mkt-mood").textContent = "";
+      $("mkt-news").innerHTML = '<li class="notice">No news file yet. It is created by the refresh job.</li>';
+      $("sec-chips").innerHTML = ""; $("sec-news").innerHTML = "";
+      return;
+    }
+    const asOf = newsAsOf();
+
+    // --- US market (index feeds): context only
+    const market = newsData.items.filter((i) => i.market && asOf - Date.parse(i.time) <= 3 * 864e5)
+      .sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+    const up = market.filter((i) => i.score > 0.15).length, down = market.filter((i) => i.score < -0.15).length;
+    const mood = up > down * 1.5 ? "leaning positive" : down > up * 1.5 ? "leaning negative" : "mixed";
+    $("mkt-mood").textContent = market.length
+      ? `${market.length} market-wide headlines in the last 3 days: ${up} positive, ${down} negative, ${market.length - up - down} neutral (tone ${mood}). For context only, not part of any score.`
+      : "No market-wide headlines found.";
+    const first = market.slice(0, 12), rest = market.slice(12, 40);
+    $("mkt-news").innerHTML = first.map((i) => articleHtml(i)).join("")
+      + (rest.length ? `<li><details class="more-list"><summary>Show ${rest.length} more</summary><ul class="articles">${rest.map((i) => articleHtml(i)).join("")}</ul></details></li>` : "");
+
+    // --- by sector
+    const res = sectorResult();
+    if (!res) { $("sec-chips").innerHTML = ""; $("sec-news").innerHTML = '<p class="notice">Sector data is not available yet.</p>'; return; }
+    const names = res.sectors.map((s) => s.name);
+    if (!names.includes(state.newsSector)) state.newsSector = names[0];
+    $("sec-chips").innerHTML = res.sectors.map((s) => `<button type="button" class="chip" data-sec="${esc(s.name)}" aria-pressed="${s.name === state.newsSector}">#${s.rank} ${esc(s.name)}</button>`).join("");
+    const sec = res.sectors.find((s) => s.name === state.newsSector);
+    const set = new Set([sec.etf, ...sectorData.sectors[sec.name].stocks]);
+    const rh = E.rankedHeadlines(newsData.items, set, asOf);
+    const sug = new Set([sec.etf, ...sec.stocks.slice(0, 3).map((r) => r.ticker)]);
+    const top = rh.used.slice(0, 12), more = rh.used.slice(12);
+    const li = (u) => articleHtml(u.item, { impact: u.impact, lift: u.lift, sug });
+    $("sec-news").innerHTML = `<div class="sec-head"><h3>${esc(sec.name)} <small>${esc(sec.etf)} · ranked #${sec.rank} of ${res.sectors.length}</small></h3>`
+      + `<p>News tone is <b>${esc(toneWord(sec.newsZ))}</b> versus other sectors, from <b>${rh.used.length}</b> headlines in the last ${E.NEWS_DAYS} days: `
+      + `<span class="pos">${rh.pos} positive</span>, <span class="neg">${rh.neg} negative</span>, ${rh.neutral} neutral. `
+      + `Suggested ideas: ${[...sug].map((t) => `<span class="tk sug">${esc(t)}</span>`).join(" ")}.</p>`
+      + `<p class="note">Sorted by impact: a headline's share of the sector's tone signal (recent and strongly worded headlines count more). ▲ pushed tone up, ▼ pushed it down. Highlighted tickers are the suggested ideas.</p></div>`
+      + (rh.used.length ? `<ul class="articles">${top.map(li).join("")}</ul>` : '<p class="note">No headlines for this sector in the last 7 days.</p>')
+      + (more.length ? `<details class="more-list"><summary>Show the other ${more.length} headlines</summary><ul class="articles">${more.map(li).join("")}</ul></details>` : "");
   }
 
   /* ---------- boot ---------- */

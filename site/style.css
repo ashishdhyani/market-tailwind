@@ -170,3 +170,27 @@ tr.detail-row .detail { position: sticky; left: 0; padding: 12px 14px 16px; box-
 .refresh-form input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 .refresh-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 10px; }
 .refresh-small { margin: 0 0 8px; font-size: .78rem; } .refresh-small button[hidden] { display: none; }
+
+/* ---- news tab ---- */
+.articles { list-style: none; margin: 0 0 10px; padding: 0; }
+.articles > li { border-top: 1px solid var(--line); }
+.articles > li:first-child { border-top: 0; }
+.art > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; padding: 10px 0; align-items: start; }
+.art > summary::-webkit-details-marker { display: none; }
+.art .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-top: 7px; }
+.art .dot.up { background: var(--pos); } .art .dot.down { background: var(--neg); }
+.a-title { display: block; font-weight: 600; font-size: .92rem; line-height: 1.35; }
+.a-meta { display: block; color: var(--muted); font-size: .76rem; margin-top: 3px; }
+.infl { font-size: .72rem; font-weight: 700; white-space: nowrap; color: var(--muted); padding-top: 3px; }
+.infl.up { color: var(--pos); } .infl.down { color: var(--neg); }
+.a-body { padding: 0 0 12px 20px; font-size: .88rem; }
+.a-body p { margin: 0 0 8px; color: var(--text); line-height: 1.5; }
+.a-body a { color: var(--accent); font-weight: 600; }
+.tk { display: inline-block; border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-right: 3px; font-size: .7rem; color: var(--muted); }
+.tk.sug { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.more-list > summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 8px 0; font-size: .88rem; }
+.sec-head { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 10px; margin: 10px 0; }
+.sec-head h3 { margin: 10px 0 4px; font-size: 1.05rem; } .sec-head h3 small { color: var(--muted); font-weight: 400; font-size: .8rem; margin-left: 4px; }
+.sec-head p { margin: 4px 0; font-size: .88rem; }
+#sec-chips { margin-bottom: 4px; }
+.sector .body .link { margin-top: 8px; padding-left: 0; font-weight: 600; }

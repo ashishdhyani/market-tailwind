@@ -300,6 +300,25 @@
     return { n, avg: sw > 0 ? sws / sw : 0, items: used };
   }
 
+  /* The headlines behind a tone number, most influential first. Impact = share of the total "tone signal"
+     (recency weight x |score|); `lift` says whether it pushed the average tone up or down. Same window and
+     weights as newsStats, so these are exactly the headlines used in the recommendation. */
+  function rankedHeadlines(items, set, asOfMs) {
+    const used = [];
+    let total = 0;
+    for (const it of items) {
+      if (!it.tickers.some((t) => set.has(t))) continue;
+      const age = Math.max(0, (asOfMs - Date.parse(it.time)) / 864e5);
+      if (age > NEWS_DAYS) continue;
+      const w = Math.pow(0.5, age / NEWS_HALF_LIFE_DAYS);
+      used.push({ item: it, w, signal: w * Math.abs(it.score), lift: it.score > 0.15 ? 1 : it.score < -0.15 ? -1 : 0 });
+      total += w * Math.abs(it.score);
+    }
+    used.forEach((u) => { u.impact = total > 0 ? u.signal / total : 0; });
+    used.sort((a, b) => b.signal - a.signal || Date.parse(b.item.time) - Date.parse(a.item.time));
+    return { used, pos: used.filter((u) => u.lift > 0).length, neg: used.filter((u) => u.lift < 0).length, neutral: used.filter((u) => u.lift === 0).length };
+  }
+
   function zList(v) {
     const m = v.reduce((a, b) => a + b, 0) / v.length;
     const sd = Math.sqrt(v.reduce((a, b) => a + (b - m) * (b - m), 0) / (v.length - 1));
@@ -358,7 +377,7 @@
     return { sectors, hasNews, newsGenerated: news ? news.generated : null, asOf: sd.dates[sd.dates.length - 1] };
   }
 
-  const api = { sectorAnalysis, newsStats, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  const api = { sectorAnalysis, newsStats, rankedHeadlines, NEWS_DAYS, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(typeof self !== "undefined" ? self : this);
