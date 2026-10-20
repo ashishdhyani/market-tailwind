@@ -37,6 +37,12 @@
 
   <div id="warn" class="notice" hidden></div>
 
+  <div class="horizon" role="radiogroup" aria-label="Ranking horizon">
+    <span class="horizon-label">Horizon</span>
+    <div id="horizons" class="seg"></div>
+  </div>
+  <p id="horizon-blurb" class="note"></p>
+
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="rank" aria-selected="true">Rankings</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
@@ -57,6 +63,7 @@
   </section>
 
   <section id="tab-bt" class="panel" hidden>
+    <p id="bt-desc" class="note"></p>
     <div id="bt-chart" class="chart"></div>
     <h2>Performance</h2>
     <div class="table-wrap"><table id="bt-metrics"></table></div>
@@ -76,7 +83,8 @@
 
   <section id="tab-about" class="panel" hidden>
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
-    <p><b>Backtest:</b> rebalanced monthly on the last trading day; the trade fills one trading day later, so the signal never sees prices it could not have acted on.</p>
+    <p><b>Horizons:</b> <i>Long-term</i> is the model above. <i>1 month</i>, <i>2 weeks</i> and <i>1 week</i> replace both momentum terms (55% together) with the return over just that recent window; trend, volatility and closeness to the 1-year high stay the same. Short windows chase what moved most recently, which is noisy and often partly reverses, so treat them as watch-list ideas and compare them on the Backtest tab.</p>
+    <p><b>Backtest:</b> rebalanced on the last trading day of each month (Long-term, 1 month), every second week (2 weeks) or every week (1 week), matching the horizon you picked. The trade fills one trading day later, so the signal never sees prices it could not have acted on. Shorter horizons trade more often, so trading costs matter much more.</p>
     <p><b>Next steps:</b> add fundamentals (SEC EDGAR), news sentiment (Finnhub free tier + FinBERT) and macro data (FRED) as extra features, then re-run the backtest to see if they help.</p>
   </section>
 

@@ -31,5 +31,22 @@ for (const [key, [topN, cost]] of [["bt_5_10", [5, 10]], ["bt_8_25", [8, 25]]]) 
   }
   console.log(key, "checked", Object.keys(p.metrics).length, "series,", r.dates.length, "days");
 }
+
+for (const [h, p] of Object.entries(py.short)) {
+  const lt2 = E.latestTable(tick, P, F, n, h);
+  chk(`${h} asof`, Date.parse(d.dates[lt2.asofIndex]), Date.parse(p.asof), 0);
+  chk(`${h} count`, lt2.rows.length, p.rank.length, 0);
+  p.rank.forEach((t, i) => {
+    if (lt2.rows[i].ticker !== t) { bad++; console.log("SHORT RANK MISMATCH", h, i, lt2.rows[i].ticker, t); return; }
+    chk(`${h} ${t} score`, lt2.rows[i].score, p.score[i]);
+  });
+  const r = E.runBacktest(d.dates, P, F, B, 5, 10, 1, h);
+  chk(`${h} n`, r.dates.length, p.n, 0);
+  for (const [name, m] of Object.entries(p.metrics)) {
+    for (const [k, v] of Object.entries(m)) if (v !== null && !Number.isNaN(v)) chk(`${h} ${name} ${k}`, r.metrics[name][k], v, 1e-6);
+    chk(`${h} ${name} end`, r.equity[name][r.dates.length - 1], p.end[name]);
+  }
+  console.log(h, "checked: ranking of", p.rank.length, "and backtest", r.dates.length, "days");
+}
 console.log(bad ? `FAILED: ${bad} mismatches` : "ALL MATCH");
 process.exit(bad ? 1 : 0);

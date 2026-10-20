@@ -42,6 +42,17 @@ h2 { font-size: 1.05rem; margin: 20px 0 8px; }
 
 .notice { background: var(--warn-bg); color: var(--warn-text); padding: 10px 14px; border-radius: 10px; margin-bottom: 12px; }
 
+.horizon { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.horizon-label { font-weight: 600; font-size: .92rem; }
+.seg { display: flex; flex: 1; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+.seg button {
+  flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-size: .78rem; font-weight: 600; white-space: nowrap;
+  padding: 10px 0; min-height: 44px; cursor: pointer; border-left: 1px solid var(--line);
+}
+.seg button:first-child { border-left: 0; }
+.seg button[aria-checked="true"] { background: var(--accent); color: #fff; }
+#horizon-blurb { margin: 6px 0 10px; }
+
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 4px; overflow-x: auto; }
 .tabs button {
   flex: 1 0 auto; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted);

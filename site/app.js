@@ -6,7 +6,7 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let data, dates, series, feats, benchSeries;
-  const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null };
+  const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long" };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -23,6 +23,7 @@
 
     $("generated").textContent = d.generated;
     buildChips();
+    buildHorizons();
     bindControls();
     $("status").hidden = true;
     $("app").hidden = false;
@@ -34,6 +35,17 @@
   function buildChips() {
     $("chips").innerHTML = data.watchlist
       .map((t) => `<button type="button" class="chip" data-t="${esc(t)}" aria-pressed="true">${esc(t)}</button>`).join("");
+  }
+
+  function buildHorizons() {
+    $("horizons").innerHTML = Object.entries(E.HORIZONS)
+      .map(([k, h]) => `<button type="button" role="radio" data-h="${k}" aria-checked="false">${esc(h.label)}</button>`).join("");
+    $("horizons").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      state.horizon = b.dataset.h;
+      render();
+    });
   }
 
   function bindControls() {
@@ -74,6 +86,9 @@
     $("cost-val").textContent = state.cost;
     $("uni-count").textContent = `${state.universe.size} of ${data.watchlist.length}`;
     $("ctl-summary").textContent = `top ${state.topN} · ${state.cost} bps · ${state.universe.size} stocks`;
+    const hz = E.HORIZONS[state.horizon];
+    document.querySelectorAll("#horizons button").forEach((b) => b.setAttribute("aria-checked", b.dataset.h === state.horizon));
+    $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
     for (const t of ["rank", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
@@ -96,19 +111,20 @@
   function renderRank() {
     const u = universe();
     let res;
-    try { res = E.latestTable(u.tickers, u.prices, u.feats, dates.length); }
+    try { res = E.latestTable(u.tickers, u.prices, u.feats, dates.length, state.horizon); }
     catch (err) { $("warn").hidden = false; $("warn").textContent = err.message; return; }
     const asof = new Date(dates[res.asofIndex] + "T00:00:00Z")
       .toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
-    $("rank-title").textContent = `Top ${state.topN} ideas as of ${asof}`;
+    const hz = E.HORIZONS[state.horizon];
+    $("rank-title").textContent = `Top ${state.topN} ideas (${hz.label.toLowerCase()}) as of ${asof}`;
     $("picks").innerHTML = res.rows.slice(0, state.topN)
-      .map((r) => `<li><b>${r.rank}. ${esc(r.ticker)}</b><span class="why">${esc(E.explain(r))}</span></li>`).join("");
+      .map((r) => `<li><b>${r.rank}. ${esc(r.ticker)}</b><span class="why">${esc(E.explain(r, state.horizon))}</span></li>`).join("");
 
-    const head = ["Ticker", "Rank", "Price", "Score", "12-1m mom.", "6-1m mom.", "Trend", "Volatility", "From 1y high"];
+    const head = ["Ticker", "Rank", "Price", "Score", "1 week", "2 weeks", "1 month", "12-1m mom.", "6-1m mom.", "Trend", "Volatility", "From 1y high"];
+    const pc = (v) => `<td class="${cls(v)}">${E.pct(v, 1, true)}</td>`;
     const rows = res.rows.map((r) => `<tr><td>${esc(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
-      + `<td>${num(r.score)}</td><td class="${cls(r.mom_12_1)}">${E.pct(r.mom_12_1, 1)}</td>`
-      + `<td class="${cls(r.mom_6_1)}">${E.pct(r.mom_6_1, 1)}</td><td>${esc(r.trend_label)}</td>`
-      + `<td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
+      + `<td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
+      + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     $("rank-table").innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
   }
 
@@ -148,11 +164,14 @@
 
   function renderBacktest() {
     const u = universe();
-    const key = [...u.tickers, state.topN, state.cost].join("|");
+    const key = [...u.tickers, state.topN, state.cost, state.horizon].join("|");
     if (!btCache || btCache.key !== key) {
-      btCache = { key, res: E.runBacktest(dates, u.prices, u.feats, benchSeries, state.topN, state.cost) };
+      btCache = { key, res: E.runBacktest(dates, u.prices, u.feats, benchSeries, state.topN, state.cost, 1, state.horizon) };
     }
     const res = btCache.res;
+    const hz = E.HORIZONS[state.horizon];
+    const cadence = { month: "monthly", "2week": "every 2 weeks", week: "weekly" }[hz.rebalance];
+    $("bt-desc").textContent = `Picks ranked by ${hz.blurb}, rebalanced ${cadence}.`;
     const traces = Object.entries(res.equity).map(([name, eq]) => ({
       x: res.dates, y: Array.from(eq), name, type: "scatter", mode: "lines", line: { width: 2 },
     }));

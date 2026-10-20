@@ -7,6 +7,17 @@
   const WEIGHTS = { mom_12_1: 0.35, mom_6_1: 0.20, trend: 0.20, low_vol: 0.15, near_high: 0.10 };
   const TRADING_DAYS = 252;
 
+  /* Ranking horizons. "long" is the original model (12-1m and 6-1m momentum). The short ones keep
+     the same trend / volatility / near-high parts but replace both momentum terms with the return
+     over the last `days` trading days (weight 0.35 + 0.20 = 0.55), and rebalance at that cadence. */
+  const HORIZONS = {
+    long: { label: "Long-term", days: null, rebalance: "month", blurb: "12-1 and 6-1 month momentum" },
+    "1m": { label: "1 month", days: 21, rebalance: "month", blurb: "last 1-month return" },
+    "2w": { label: "2 weeks", days: 10, rebalance: "2week", blurb: "last 2-week return" },
+    "1w": { label: "1 week", days: 5, rebalance: "week", blurb: "last 1-week return" },
+  };
+  const RET_WEIGHT = WEIGHTS.mom_12_1 + WEIGHTS.mom_6_1;
+
   const nan = (n) => new Float64Array(n).fill(NaN);
 
   function shift(a, k) {
@@ -50,10 +61,15 @@
     const sma50 = rolling(p, 50, mean), sma200 = rolling(p, 200, mean);
     const hi = rolling(p, 252, max);
     const vol = rolling(pctChange(p), 63, std);
-    const f = { mom_12_1: nan(n), mom_6_1: nan(n), trend: nan(n), vol_63d: nan(n), drawdown_1y: nan(n) };
+    const s5 = shift(p, 5), s10 = shift(p, 10);
+    const f = { mom_12_1: nan(n), mom_6_1: nan(n), trend: nan(n), vol_63d: nan(n), drawdown_1y: nan(n),
+      ret_5: nan(n), ret_10: nan(n), ret_21: nan(n) };
     for (let i = 0; i < n; i++) {
       f.mom_12_1[i] = s21[i] / s252[i] - 1;
       f.mom_6_1[i] = s21[i] / s126[i] - 1;
+      f.ret_5[i] = p[i] / s5[i] - 1;
+      f.ret_10[i] = p[i] / s10[i] - 1;
+      f.ret_21[i] = p[i] / s21[i] - 1;
       if (!Number.isNaN(sma200[i]) && !Number.isNaN(p[i])) {
         f.trend[i] = (p[i] > sma200[i] ? 1 : 0) + (sma50[i] > sma200[i] ? 1 : 0);
       }
@@ -86,10 +102,13 @@
 
   /* feats: array (one per ticker) of featuresFor() results. Returns one score series per ticker.
      A score is missing if any component is missing (NaN propagates, like the pandas sum). */
-  function scores(feats, n) {
+  function scores(feats, n, horizon = "long") {
+    const days = HORIZONS[horizon].days;
+    const retKey = { 5: "ret_5", 10: "ret_10", 21: "ret_21" }[days];
     const zs = {
       mom_12_1: zScore(feats.map((f) => f.mom_12_1), n),
       mom_6_1: zScore(feats.map((f) => f.mom_6_1), n),
+      ret: retKey ? zScore(feats.map((f) => f[retKey]), n) : null,
       trend: zScore(feats.map((f) => f.trend), n),
       low_vol: zScore(feats.map((f) => f.vol_63d), n),
       near_high: zScore(feats.map((f) => f.drawdown_1y), n),
@@ -97,7 +116,9 @@
     return feats.map((_, j) => {
       const s = nan(n);
       for (let i = 0; i < n; i++) {
-        s[i] = WEIGHTS.mom_12_1 * zs.mom_12_1[j][i] + WEIGHTS.mom_6_1 * zs.mom_6_1[j][i]
+        const mom = zs.ret ? RET_WEIGHT * zs.ret[j][i]
+          : WEIGHTS.mom_12_1 * zs.mom_12_1[j][i] + WEIGHTS.mom_6_1 * zs.mom_6_1[j][i];
+        s[i] = mom
           + WEIGHTS.trend * zs.trend[j][i] - WEIGHTS.low_vol * zs.low_vol[j][i]
           + WEIGHTS.near_high * zs.near_high[j][i];
       }
@@ -108,8 +129,8 @@
   const TREND_LABEL = { 2: "Strong uptrend", 1: "Mixed trend", 0: "Downtrend" };
 
   /* Ranked snapshot on the most recent date with any score. */
-  function latestTable(tickers, prices, feats, n) {
-    const sc = scores(feats, n);
+  function latestTable(tickers, prices, feats, n, horizon = "long") {
+    const sc = scores(feats, n, horizon);
     let d = -1;
     for (let i = n - 1; i >= 0 && d < 0; i--) if (sc.some((s) => !Number.isNaN(s[i]))) d = i;
     if (d < 0) throw new Error("Not enough price history yet (need about 1 year per stock).");
@@ -119,6 +140,7 @@
       rows.push({
         ticker: t, price: prices[j][d], score: sc[j][d],
         mom_12_1: feats[j].mom_12_1[d], mom_6_1: feats[j].mom_6_1[d],
+        ret_5: feats[j].ret_5[d], ret_10: feats[j].ret_10[d], ret_21: feats[j].ret_21[d],
         trend: feats[j].trend[d], trend_label: TREND_LABEL[feats[j].trend[d]],
         vol_63d: feats[j].vol_63d[d], drawdown_1y: feats[j].drawdown_1y[d],
       });
@@ -134,18 +156,32 @@
     return plus && v >= 0 ? "+" + s : s;
   }
 
-  function explain(r) {
-    return `12-1m momentum ${pct(r.mom_12_1, 0, true)}, 6-1m ${pct(r.mom_6_1, 0, true)}; `
+  function explain(r, horizon = "long") {
+    const h = HORIZONS[horizon];
+    const lead = h.days
+      ? `Return over ${h.label.toLowerCase()} ${pct(r[{ 5: "ret_5", 10: "ret_10", 21: "ret_21" }[h.days]], 1, true)} `
+        + `(1w ${pct(r.ret_5, 1, true)}, 2w ${pct(r.ret_10, 1, true)}, 1m ${pct(r.ret_21, 1, true)}); `
+      : `12-1m momentum ${pct(r.mom_12_1, 0, true)}, 6-1m ${pct(r.mom_6_1, 0, true)}; `;
+    return lead
       + `${r.trend_label.toLowerCase()}; volatility ${pct(r.vol_63d)}; `
       + `${pct(r.drawdown_1y)} from 1-year high`;
   }
 
   /* ---------- backtest ---------- */
 
-  function rebalanceIdx(dates) {
+  function weekKey(dateStr) {  // ISO week, Monday-Sunday
+    const d = new Date(dateStr + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7));
+    const week = Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+    return `${d.getUTCFullYear()}-${week}`;
+  }
+
+  /* Index of the last trading day of each month / ISO week; "2week" keeps every other week. */
+  function rebalanceIdx(dates, cadence = "month") {
     const last = new Map();
-    dates.forEach((d, i) => last.set(d.slice(0, 7), i));
-    return [...last.values()].sort((a, b) => a - b);
+    dates.forEach((d, i) => last.set(cadence === "month" ? d.slice(0, 7) : weekKey(d), i));
+    const idx = [...last.values()].sort((a, b) => a - b);
+    return cadence === "2week" ? idx.filter((_, k) => k % 2 === 0) : idx;
   }
 
   // target[i] is a weight vector (decided at date i) or null. Mirrors _simulate().
@@ -189,13 +225,13 @@
   }
 
   /* prices/feats: per-ticker arrays for the chosen universe; bench: {name: Float64Array}. */
-  function runBacktest(dates, prices, feats, bench, topN, costBps, lag = 1) {
+  function runBacktest(dates, prices, feats, bench, topN, costBps, lag = 1, horizon = "long") {
     const n = dates.length, m = prices.length;
     const rets = prices.map((p) => pctChange(p).map((x) => (Number.isNaN(x) ? 0 : x)));
-    const sc = scores(feats, n);
+    const sc = scores(feats, n, horizon);
 
     const tgtTop = new Array(n).fill(null), tgtAll = new Array(n).fill(null);
-    for (const d of rebalanceIdx(dates)) {
+    for (const d of rebalanceIdx(dates, HORIZONS[horizon].rebalance)) {
       const valid = [];
       for (let j = 0; j < m; j++) if (!Number.isNaN(sc[j][d])) valid.push(j);
       if (valid.length < Math.max(topN, 2)) continue;
@@ -243,7 +279,7 @@
     return out;
   }
 
-  const api = { WEIGHTS, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  const api = { WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(typeof self !== "undefined" ? self : this);
