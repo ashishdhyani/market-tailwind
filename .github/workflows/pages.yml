@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: "30 22 * * 1-5"   # weekdays after the US close (UTC)
+    # GitHub cron runs on UTC. Singapore is UTC+8.
+    - cron: "0 0 * * 2-6"     # 8:00 AM SGT, Tue-Sat: US session that just closed
+    - cron: "0 13 * * 1-5"    # 9:00 PM SGT, Mon-Fri: before the US open (9:30 PM SGT, 10:30 PM in US winter time)
   workflow_dispatch:
 
 permissions:
