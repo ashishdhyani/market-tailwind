@@ -15,6 +15,24 @@
 <header class="top">
   <h1>Market Tailwind</h1>
   <p class="sub">Which sectors have the wind at their back? Price momentum + daily news tone, plus stock rankings checked with a backtest. A research tool, not financial advice.</p>
+  <div class="refresh">
+    <span class="refresh-info">Data updated <b id="refresh-time">…</b></span>
+    <button type="button" id="refresh-btn" class="btn">↻ Refresh data</button>
+  </div>
+  <p id="refresh-msg" class="refresh-msg" hidden></p>
+  <div id="refresh-form" class="refresh-form" hidden>
+    <p><b>One-time setup</b> (the token stays in this browser only):</p>
+    <ol>
+      <li>Open <a id="refresh-token-link" target="_blank" rel="noopener noreferrer">GitHub → New fine-grained token</a>.</li>
+      <li>Repository access: <i>Only select repositories</i> → <b id="refresh-repo"></b>.</li>
+      <li>Permissions → Repository permissions → <b>Actions: Read and write</b>. Nothing else.</li>
+      <li>Generate, copy the token, paste it here:</li>
+    </ol>
+    <input id="refresh-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…">
+    <div class="refresh-actions"><button type="button" id="refresh-save" class="btn">Save and refresh</button>
+      <a id="refresh-link" target="_blank" rel="noopener noreferrer">or run it on GitHub instead</a></div>
+  </div>
+  <p class="refresh-small"><button type="button" id="refresh-forget" class="link" hidden>Forget saved token</button></p>
 </header>
 
 <main id="app" hidden>
@@ -108,5 +126,6 @@
 <script src="fundamentals.js"></script>
 <script src="detail.js"></script>
 <script src="app.js"></script>
+<script src="refresh.js"></script>
 </body>
 </html>

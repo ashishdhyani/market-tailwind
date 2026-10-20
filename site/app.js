@@ -25,6 +25,7 @@
     state.ticker = d.watchlist[0];
 
     $("generated").textContent = d.generated;
+    if ($("refresh-time")) $("refresh-time").textContent = d.generated;
     buildChips();
     buildHorizons();
     bindControls();

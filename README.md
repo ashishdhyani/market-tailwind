@@ -9,6 +9,7 @@ watchlist of US and Singapore stocks by momentum, trend and risk, and backtests 
 `site/data.json`. A GitHub Action (`.github/workflows/pages.yml`) refreshes that file from Yahoo
 Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM Singapore time, Mon-Fri, before the US open) (prices via `data.py` / `export_web.py`, headlines via `news.py`, company numbers via `fundamentals.py`) and republishes the site. If Yahoo blocks the refresh, the last good data is kept.
 
+- **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
 - Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`)
