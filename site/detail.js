@@ -112,7 +112,7 @@
     const facts = factList.length ? `<p class="facts">${factList.map(esc).join(" · ")}</p>` : "";
     return `<div class="detail-inner">${facts}<h4>Why it is recommended</h4><ul class="why-list">${why.map((w) => `<li>${w}</li>`).join("")}</ul>`
       + (grid ? `<h4>${isEtf ? "Fund numbers" : "Key numbers investors look at"}</h4>${grid}` : "") + legend + heads
-      + `<p class="muted">Research tool, not financial advice.</p></div>`;
+      + `<p class="muted">Research tool, not financial advice. Do your own research before acting on any idea.</p></div>`;
   }
 
   const api = { buildDetail, toneWord };

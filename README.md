@@ -41,6 +41,10 @@ streamlit run app.py      # open the dashboard
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
+## Disclaimer
+
+Market Tailwind is a research tool, **not financial advice**. The rankings, sector views and suggested stocks/ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and do not rely on them; investing involves risk, including losing all your money. The same notice appears on every page of the app.
+
 ## Caveats
 
 - Survivorship bias: the watchlist is today's winners, which flatters the backtest.
