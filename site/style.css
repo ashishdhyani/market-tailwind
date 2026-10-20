@@ -195,9 +195,16 @@ tr.detail-row .detail { position: sticky; left: 0; padding: 12px 14px 16px; box-
 #sec-chips { margin-bottom: 4px; }
 .sector .body .link { margin-top: 8px; padding-left: 0; font-weight: 600; }
 
-/* ---- disclaimer ---- */
-.disclaimer { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: 10px 14px; margin: 0 0 12px; font-size: .84rem; line-height: 1.45; }
-.disclaimer p { margin: 0; }
-.disclaimer summary { cursor: pointer; font-weight: 600; margin-top: 6px; text-decoration: underline; }
-.disclaimer ul { margin: 8px 0 2px; padding-left: 18px; } .disclaimer li { margin: 5px 0; }
+/* ---- disclaimer: one line, full text on tap ---- */
+.disclaimer { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; margin: 0 0 12px; font-size: .82rem; line-height: 1.4; }
+.disclaimer > summary { list-style: none; cursor: pointer; padding: 8px 12px; display: flex; align-items: baseline; gap: 8px; }
+.disclaimer > summary::-webkit-details-marker { display: none; }
+.disclaimer .s-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.disclaimer .more { font-weight: 600; text-decoration: underline; white-space: nowrap; }
+.disclaimer .more::after { content: " ▾"; display: inline-block; text-decoration: none; }
+.disclaimer[open] .more { font-size: 0; }
+.disclaimer[open] .more::after { content: "Close ▴"; font-size: .82rem; text-decoration: underline; }
+.disc-body { padding: 0 12px 10px; }
+.disc-body p { margin: 0 0 4px; }
+.disc-body ul { margin: 6px 0 0; padding-left: 18px; } .disc-body li { margin: 5px 0; }
 footer b { color: var(--text); }
