@@ -7,11 +7,11 @@ watchlist of US and Singapore stocks by momentum, trend and risk, and backtests 
 
 `site/` is a static web app: the scoring and backtest (`site/engine.js`) run in the browser on
 `site/data.json`. A GitHub Action (`.github/workflows/pages.yml`) refreshes that file from Yahoo
-Finance every weekday (prices via `data.py` / `export_web.py`, headlines via `news.py`) and republishes the site. If Yahoo blocks the refresh, the last good data is kept.
+Finance every weekday (prices via `data.py` / `export_web.py`, headlines via `news.py`, company numbers via `fundamentals.py`) and republishes the site. If Yahoo blocks the refresh, the last good data is kept.
 
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
-- Refresh data locally: `python data.py && python export_web.py && python news.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`)
+- Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`)
 
 ## Python / Streamlit version (original)
 
@@ -36,6 +36,7 @@ streamlit run app.py      # open the dashboard
 | `backtest.py` | Monthly rebalance, next-day fills, costs, benchmark comparison. |
 | `app.py` | Streamlit dashboard. |
 | `export_web.py` | Export prices from SQLite to `site/data.json` and `site/sector_data.json`. |
+| `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
