@@ -9,7 +9,7 @@
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set(), pb: new Set() };
   const secCache = {};
   let picksCtx = null;
-  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false, pbWindow: "1m", pbDrop: 10, profitOnly: false, active: new Set(), hiddenLoss: 0 };
+  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false, pbWindow: "1m", pbDrop: 10, pbGroup: "", profitOnly: false, active: new Set(), hiddenLoss: 0 };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -613,6 +613,7 @@
       if (!state.active.has(t)) continue;
       const info = infoOf(t);
       if (!info || info.type === "ETF") continue;
+      if (state.pbGroup && groupOf[t] !== state.pbGroup) continue;        // optional sector / group filter
       const src = priceSource(t), row = src ? rowFromSource(src) : null;
       if (row && Number.isFinite(row[w.key]) && row[w.key] <= -drop) cands.push({ t, row, info, news: null });
     }
@@ -623,9 +624,13 @@
       c.headlines = nw ? nw.items.slice(0, 2) : [];
     }
     const res = P.screen(cands, { window: state.pbWindow, minDrop: drop, limit: 25 });
-    $("pb-summary").textContent = res.total
-      ? `${res.total} of the ${[...state.active].filter((t) => infoOf(t) && infoOf(t).type !== "ETF").length} stocks in your universe fell at least ${state.pbDrop}% over ${w.label}. Showing the ${res.shown.length} with the most supporting evidence (net of the cautions).`
-      : `No stocks in your universe fell at least ${state.pbDrop}% over ${w.label}. Try a smaller fall or a longer window.`;
+    const scope = state.pbGroup ? `in ${state.pbGroup}` : "in your universe";
+    const pool = [...state.active].filter((t) => infoOf(t) && infoOf(t).type !== "ETF" && (!state.pbGroup || groupOf[t] === state.pbGroup)).length;
+    $("pb-summary").textContent = state.pbGroup && !state.groups.has(state.pbGroup)
+      ? `${state.pbGroup} is switched off in Controls (Universe), so it is excluded here. Switch it back on, or choose another sector.`
+      : res.total
+      ? `${res.total} of the ${pool} stocks ${scope} fell at least ${state.pbDrop}% over ${w.label}. Showing the ${res.shown.length} with the most supporting evidence (net of the cautions).`
+      : `No stocks ${scope} fell at least ${state.pbDrop}% over ${w.label}${pool ? "" : " (none to screen)"}. Try a smaller fall, a longer window, or another sector.`;
     $("pb-list").innerHTML = res.shown.map((r, i) => {
       const x = r.row, tr = (v) => (Number.isFinite(v) ? E.pct(v, 1, true) : "n/a");
       const sup = r.supports.slice(0, 3).map((q) => `<span class="pb-s">✓ ${esc(q.text)}</span>`).join("");
@@ -650,9 +655,22 @@
       + `<h4>Evidence against</h4>${list(r.cautions, "against", "⚠") || '<p class="muted">No cautions found in the data we have.</p>'}${heads}</div>` + holdingDetail(t);
   }
 
+  const PB_KEY = "mt_pullbacks";
   function bindPullbacks() {
-    $("pb-window").onchange = (e) => { state.pbWindow = e.target.value; renderPullbacks(); };
-    $("pb-drop").onchange = (e) => { const v = Math.min(60, Math.max(3, parseFloat(e.target.value) || 10)); state.pbDrop = v; e.target.value = v; renderPullbacks(); };
+    // Sector dropdown: every group that has company stocks (the 11 S&P sectors, Singapore, quantum); ETF-only groups are left out.
+    const groups = data.groups.map((g) => ({ name: g.name, n: g.tickers.filter((t) => infoOf(t) && infoOf(t).type !== "ETF").length })).filter((g) => g.n > 0);
+    $("pb-group").innerHTML = '<option value="">All sectors and groups</option>' + groups.map((g) => `<option value="${esc(g.name)}">${esc(g.name)} (${g.n})</option>`).join("");
+    const saved = lsGet(PB_KEY);
+    if (saved) {
+      if (P.WINDOWS[saved.window]) state.pbWindow = saved.window;
+      if (Number.isFinite(saved.drop)) state.pbDrop = Math.min(60, Math.max(3, saved.drop));
+      if (groups.some((g) => g.name === saved.group)) state.pbGroup = saved.group;
+    }
+    $("pb-window").value = state.pbWindow; $("pb-drop").value = state.pbDrop; $("pb-group").value = state.pbGroup;
+    const remember = () => lsSet(PB_KEY, { window: state.pbWindow, drop: state.pbDrop, group: state.pbGroup });
+    $("pb-group").onchange = (e) => { state.pbGroup = e.target.value; remember(); renderPullbacks(); };
+    $("pb-window").onchange = (e) => { state.pbWindow = e.target.value; remember(); renderPullbacks(); };
+    $("pb-drop").onchange = (e) => { const v = Math.min(60, Math.max(3, parseFloat(e.target.value) || 10)); state.pbDrop = v; e.target.value = v; remember(); renderPullbacks(); };
     $("pb-list").addEventListener("toggle", (e) => {
       const det = e.target;
       if (!pbCtx || !det.matches?.("details.stock")) return;

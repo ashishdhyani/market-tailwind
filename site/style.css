@@ -269,3 +269,5 @@ tr.extra, tr.detail-row.extra { display: none; }
 .pb-s { color: var(--pos); } .pb-c { color: var(--neg); }
 .pb-ev { margin: 0 0 6px; padding-left: 18px; font-size: .88rem; } .pb-ev li { margin: 3px 0; }
 .pb-ev.for li::marker { color: var(--pos); } .pb-ev.against li::marker { color: var(--neg); }
+
+.plan-grid .wide { grid-column: 1 / -1; }

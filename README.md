@@ -44,7 +44,7 @@ streamlit run app.py      # open the dashboard
 
 ## Pullbacks (a screen, not a forecast)
 
-The Pullbacks tab lists stocks that fell by at least X% over a chosen window (1 week to 3 months) and ranks them by how much supporting evidence they have, with the evidence for and against on each card: news tone, profitability, analyst target and rating, expected earnings (forward vs trailing P/E), sales growth, valuation, and whether the 6-month trend is still up. A very sharp fall counts as a caution, because analyst targets lag the price. ETFs are excluded (no company financials). It is the same for everyone and cannot be backtested (we only have today's analyst and financial data); a falling stock is often falling for a good reason. Logic and tests: `site/pullbacks.js`, `tests/test_pullbacks.js`.
+The Pullbacks tab lists stocks that fell by at least X% over a chosen window (1 week to 3 months) and ranks them by how much supporting evidence they have, with the evidence for and against on each card: news tone, profitability, analyst target and rating, expected earnings (forward vs trailing P/E), sales growth, valuation, and whether the 6-month trend is still up. A very sharp fall counts as a caution, because analyst targets lag the price. An optional Sector dropdown narrows it to one S&P 500 sector, Singapore or the quantum group (choices are remembered in the browser). ETFs are excluded (no company financials). It is the same for everyone and cannot be backtested (we only have today's analyst and financial data); a falling stock is often falling for a good reason. Logic and tests: `site/pullbacks.js`, `tests/test_pullbacks.js`.
 
 ## Cash planner (a calculator, not advice)
 
