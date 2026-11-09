@@ -7,7 +7,8 @@
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : "#");
-  const sp = (v, d = 1) => E.pct(v, d, true);
+  const sp = (v, d = 1) => (Number.isFinite(v) ? E.pct(v, d, true) : "n/a");
+  const pc = (v, d = 0) => (Number.isFinite(v) ? E.pct(v, d) : "n/a");
   const TAG = { good: "Good", ok: "Fair", bad: "Weak" };
   const TREND = {
     2: "Strong uptrend: the price is above its 200-day average and the 50-day average is above the 200-day average.",
@@ -50,11 +51,11 @@
         ? `<b>Recent strength:</b> return over ${esc(hz.label.toLowerCase())} is ${sp(row[RET_KEY[hz.days]])} (1 week ${sp(row.ret_5)}, 2 weeks ${sp(row.ret_10)}, 1 month ${sp(row.ret_21)}).`
         : `<b>Momentum:</b> ${sp(row.mom_12_1, 0)} over the past year (skipping the latest month) and ${sp(row.mom_6_1, 0)} over six months. Stocks that have been winning tend to keep winning for a while.`);
       why.push(`<b>Trend:</b> ${esc(TREND[row.trend] || row.trend_label)}`);
-      why.push(`<b>Risk:</b> price swings about ${E.pct(row.vol_63d, 0)} a year; it is ${row.drawdown_1y > -0.005 ? "at its 1-year high" : E.pct(-row.drawdown_1y, 0) + " below its 1-year high"}.`);
+      why.push(`<b>Risk:</b> price swings about ${pc(row.vol_63d)} a year; it is ${!Number.isFinite(row.drawdown_1y) ? "n/a vs. its 1-year high" : row.drawdown_1y > -0.005 ? "at its 1-year high" : pc(-row.drawdown_1y) + " below its 1-year high"}.`);
     }
 
     // 3. Sector context (rank view only; the sector view states it above)
-    if (mode === "rank" && ctx.sector) {
+    if (mode !== "sector" && ctx.sector) {
       const s = ctx.sector;
       why.push(`<b>Sector:</b> ${esc(s.name)} is the #${s.rank} sector of ${s.of} right now (${esc(s.etf)} ${sp(s.etfRet)} over ${esc(s.retLabel)}).`);
     }
@@ -66,14 +67,14 @@
       why.push(`<b>News:</b> tone is ${esc(toneWord(news))} across ${news.n} headline${news.n === 1 ? "" : "s"} in the last 7 days.`
         + (top ? ` Latest: <a href="${esc(safeUrl(top.url))}" target="_blank" rel="noopener noreferrer">${esc(top.title)}</a> (${esc(ago(top.time, now))}).` : ""));
     } else {
-      why.push("<b>News:</b> no recent headlines for this ticker in our feed, so news did not influence it.");
+      why.push(mode === "holding" ? "<b>News:</b> no recent headlines for this ticker in our feed." : "<b>News:</b> no recent headlines for this ticker in our feed, so news did not influence it.");
     }
 
     // 5. Fundamentals
     if (ev && !isEtf) {
       const sm = ev.summary;
       if (sm && sm.label !== "Not enough data") {
-        why.push(`<b>Fundamentals check: ${esc(sm.label)}</b> (${sm.good} of ${sm.of} core checks are good). These do <i>not</i> change the ranking; they help you judge whether the price is reasonable.`);
+        why.push(`<b>Fundamentals check: ${esc(sm.label)}</b> (${sm.good} of ${sm.of} core checks are good). ${mode === "holding" ? "They are rules of thumb to help you judge valuation and quality, not instructions." : "These do <i>not</i> change the ranking; they help you judge whether the price is reasonable."}`);
       }
       if (ev.strengths.length) why.push(`<b>Strengths:</b> ${ev.strengths.slice(0, 3).map(esc).join("; ")}.`);
       if (ev.cautions.length) why.push(`<b>Watch out:</b> ${ev.cautions.slice(0, 3).map(esc).join("; ")}.`);
@@ -110,7 +111,7 @@
 
     const factList = ev ? [ev.name, ...(ev.facts || [])].filter(Boolean) : [];
     const facts = factList.length ? `<p class="facts">${factList.map(esc).join(" · ")}</p>` : "";
-    return `<div class="detail-inner">${facts}<h4>Why it is recommended</h4><ul class="why-list">${why.map((w) => `<li>${w}</li>`).join("")}</ul>`
+    return `<div class="detail-inner">${facts}<h4>${mode === "holding" ? "Where it stands today" : "Why it is recommended"}</h4><ul class="why-list">${why.map((w) => `<li>${w}</li>`).join("")}</ul>`
       + (grid ? `<h4>${isEtf ? "Fund numbers" : "Key numbers investors look at"}</h4>${grid}` : "") + legend + heads
       + `<p class="muted">Research tool, not financial advice. Do your own research before acting on any idea.</p></div>`;
   }

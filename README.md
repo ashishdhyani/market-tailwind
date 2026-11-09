@@ -12,7 +12,7 @@ Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM 
 - **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`)
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_protect.mjs`)
 
 ## Python / Streamlit version (original)
 
@@ -40,6 +40,14 @@ streamlit run app.py      # open the dashboard
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
+
+## My Holdings (private)
+
+The Holdings tab lets you enter what you own (paste rows or load a CSV: `ticker, shares, average cost`, with or without a header row such as `Symbol, Quantity, Avg Price`). It shows each position next to the app's signals (trend, news tone, ranking, fundamentals check), your concentration by sector, and **what changed since the previous data update** (trend, ranking bucket, news tone, fundamentals check, price moves of 5% or more).
+
+- **Private:** holdings are kept only in that browser's local storage. They are not uploaded and never written to this repository (which is public). They do not sync between devices, and the page password does not encrypt them on the device. PDFs are not read; export a CSV from your broker or paste rows.
+- **A monitor, not advice:** it reports movement in the indicators and never says buy or sell.
+- **Coverage:** only tickers the app has prices for (those on the Rankings and Sectors tabs, plus SPY and ES3.SI). Others are listed as not covered.
 
 ## Password protection
 

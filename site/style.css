@@ -208,3 +208,26 @@ tr.detail-row .detail { position: sticky; left: 0; padding: 12px 14px 16px; box-
 .disc-body p { margin: 0 0 4px; }
 .disc-body ul { margin: 6px 0 0; padding-left: 18px; } .disc-body li { margin: 5px 0; }
 footer b { color: var(--text); }
+
+/* ---- holdings ---- */
+.priv { background: var(--accent-soft); border-radius: 10px; padding: 9px 12px; margin: 8px 0 12px; }
+.editor { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; }
+.editor > summary { padding: 12px 14px; font-weight: 600; cursor: pointer; }
+.ed-body { padding: 0 14px 14px; }
+.editor textarea { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: .88rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ed-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; }
+.btn.alt { background: var(--card); color: var(--accent); border: 1px solid var(--accent); display: inline-flex; align-items: center; }
+.danger { color: var(--neg); }
+.cur-block { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+.cur-block h3 { margin: 0 0 4px; font-size: 1rem; } .cur-block h3 small { color: var(--muted); font-weight: 400; font-size: .8rem; margin-left: 6px; }
+.bar-row { display: grid; grid-template-columns: 8.5em 1fr 3em; gap: 8px; align-items: center; font-size: .82rem; margin: 3px 0; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--accent); }
+.bar-val { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.changes { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px 10px; margin: 0 0 12px; }
+.changes h3 { margin: 10px 0 2px; font-size: 1rem; }
+.changes ul { list-style: none; margin: 6px 0 0; padding: 0; font-size: .88rem; }
+.changes li { padding: 5px 0; border-top: 1px solid var(--line); } .changes li:first-child { border-top: 0; }
+.changes .up { color: var(--pos); font-weight: 700; } .changes .down { color: var(--neg); font-weight: 700; }
+#hold-table td { vertical-align: top; }
+#hold-uncovered { margin: 10px 0; }

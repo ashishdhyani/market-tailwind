@@ -1,12 +1,12 @@
 "use strict";
 (function () {
-  const E = window.Engine, F = window.Fundamentals, D = window.Detail;
+  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let data, dates, series, feats, benchSeries, sectorData = null, newsData = null, fundData = null;
-  const openRows = { rank: new Set(), sec: new Set(), picks: new Set() };
+  const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set() };
   const secCache = {};
   let picksCtx = null;
   const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null };
@@ -23,12 +23,14 @@
     for (const t of Object.keys(d.benchmarks)) benchSeries[t] = toArray(d.prices[t]);
     state.universe = new Set(d.watchlist);
     state.ticker = d.watchlist[0];
+    loadHoldings();
 
     $("generated").textContent = d.generated;
     if ($("refresh-time")) $("refresh-time").textContent = d.generated;
     buildChips();
     buildHorizons();
     bindControls();
+    bindHoldings();
     $("status").hidden = true;
     $("app").hidden = false;
     render();
@@ -111,7 +113,7 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "sectors", "news", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "news", "hold", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
     const tooFew = state.universe.size < 6 && ["rank", "chart", "bt"].includes(state.tab);
@@ -123,6 +125,7 @@
     }
     if (state.tab === "sectors") renderSectors();
     if (state.tab === "news") renderNews();
+    if (state.tab === "hold") renderHoldings();
     if (state.tab === "rank") renderRank();
     if (state.tab === "chart") renderChart();
     if (state.tab === "bt") renderBacktest();
@@ -365,6 +368,181 @@
         + (res.hasNews ? `<h3>Latest headlines</h3>${newsList(s.headlines, 6)}<button type="button" class="link" data-news="${esc(s.name)}">Read all ${esc(s.name)} news in the News tab →</button>` : "") + `</div></details>`;
     }).join("");
     document.querySelectorAll("#sector-list table").forEach((tb) => wireExpandable(tb, openRows.sec, (t) => detailFor(t, "sector")));
+  }
+
+  /* ---------- my holdings (kept only in this browser) ---------- */
+
+  const HOLD_KEY = "mt_holdings", SNAP_KEY = "mt_snap_", SEEN_KEY = "mt_seen_";
+  const lsGet = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } };
+  const lsDel = (k) => { try { localStorage.removeItem(k); } catch { /* ignore */ } };
+  let holdings = [];            // [{ t, qty, cost }]
+  const sFeats = {}, rankCache = {};
+  // Yahoo's sector names -> the names used in the Sectors tab, so a stock and its sector ETF land in one bucket.
+  const YAHOO_SECTOR = { Healthcare: "Health Care", "Financial Services": "Financials", "Consumer Cyclical": "Consumer Discretionary",
+    "Consumer Defensive": "Consumer Staples", "Basic Materials": "Materials" };
+
+  function loadHoldings() {
+    const raw = lsGet(HOLD_KEY);
+    holdings = Array.isArray(raw)
+      ? raw.filter((h) => h && typeof h.t === "string" && /^[A-Z][A-Z0-9.\-]{0,11}$/.test(h.t))
+        .map((h) => ({ t: h.t, qty: Number.isFinite(h.qty) ? h.qty : null, cost: Number.isFinite(h.cost) ? h.cost : null })).slice(0, Hd.MAX_HOLDINGS)
+      : [];
+  }
+  const knownTickers = () => new Set([...Object.keys(data.prices), ...(sectorData ? Object.keys(sectorData.prices) : [])]);
+
+  // Where the app has prices for a ticker: the long watchlist history first, then benchmarks, then sector data.
+  function priceSource(t) {
+    if (series[t]) return { p: series[t], f: feats[t], n: dates.length };
+    if (benchSeries[t]) return { p: benchSeries[t], f: (sFeats[t] ??= E.featuresFor(benchSeries[t])), n: dates.length };
+    if (sectorData && sectorData.prices[t]) return { p: sectorData.prices[t], f: (sFeats[t] ??= E.featuresFor(sectorData.prices[t])), n: sectorData.dates.length };
+    return null;
+  }
+  function rowFromSource(src) {
+    let i = src.n - 1;
+    while (i >= 0 && Number.isNaN(src.p[i])) i--;
+    if (i < 0) return null;
+    const f = src.f, tr = f.trend[i];
+    return { price: src.p[i], mom_12_1: f.mom_12_1[i], mom_6_1: f.mom_6_1[i], ret_5: f.ret_5[i], ret_10: f.ret_10[i], ret_21: f.ret_21[i],
+      trend: tr, trend_label: E.TREND_LABEL[tr] || "n/a", vol_63d: f.vol_63d[i], drawdown_1y: f.drawdown_1y[i] };
+  }
+  function watchlistRanks() {
+    return (rankCache[state.horizon] ??= (() => {
+      try {
+        const res = E.latestTable(data.watchlist, data.watchlist.map((t) => series[t]), data.watchlist.map((t) => feats[t]), dates.length, state.horizon);
+        return { total: res.rows.length, map: new Map(res.rows.map((r) => [r.ticker, r])) };
+      } catch { return { total: 0, map: new Map() }; }
+    })());
+  }
+
+  function signalFor(h) {
+    const t = h.t, info = infoOf(t), src = priceSource(t), row = src ? rowFromSource(src) : null;
+    const sc = sectorContext(t), wr = watchlistRanks(), wrow = wr.map.get(t) || null;
+    const z = sc.stock ? sc.stock.newsZ : sc.s && sc.s.etf === t ? sc.s.newsZ : null;
+    const news = tickerNews(t, z);
+    const ev = info && row ? F.evaluate(info, row.price) : null;
+    return { t, h, info, row, sc, wrow, rank: wrow ? { n: wrow.rank, of: wr.total } : null, news,
+      newsWord: news && news.n ? D.toneWord(news) : null,
+      fund: ev && ev.summary && ev.summary.label !== "Not enough data" ? ev.summary.label : null,
+      currency: info?.currency || (t.endsWith(".SI") ? "SGD" : "USD"), covered: !!row,
+      group: sc.s ? sc.s.name : YAHOO_SECTOR[info?.sector] || info?.sector || (info?.type === "ETF" ? "Other ETFs" : "Other") };
+  }
+
+  function holdingDetail(t) {
+    const s = signalFor(holdings.find((h) => h.t === t));
+    const row = s.row ? (s.wrow ? { ...s.row, score: s.wrow.score } : s.row) : null;
+    return D.buildDetail({ ticker: t, info: s.info, price: row ? row.price : null, row, horizon: state.horizon, mode: "holding",
+      rank: s.wrow ? s.rank : undefined, sector: s.sc.sector, news: s.news, now: Date.now() });
+  }
+
+  const money = (v, c) => (c === "SGD" ? "S$" : "$") + Math.round(v).toLocaleString("en-US");
+  const hmsg = (text, err) => { const el = $("hold-msg"); el.textContent = text; el.style.color = err ? "var(--neg)" : ""; };
+
+  function saveFromText(text) {
+    const r = Hd.parseHoldings(text, knownTickers());
+    holdings = r.holdings;
+    const ok = lsSet(HOLD_KEY, holdings);
+    $("hold-text").value = holdings.length ? Hd.toCsv(holdings) : "";
+    const skipped = r.rejected.length ? ` Skipped ${r.rejected.length} invalid line${r.rejected.length === 1 ? "" : "s"} (${r.rejected.slice(0, 3).map((x) => `"${x.line.slice(0, 24)}": ${x.reason}`).join("; ")}).` : "";
+    hmsg(ok ? `Saved ${holdings.length} holding${holdings.length === 1 ? "" : "s"} in this browser.${skipped}` : "Could not save in this browser (private mode?). Your holdings will be lost when you close the tab." + skipped, !ok || (!holdings.length && !!text.trim()));
+    render();
+  }
+
+  function bindHoldings() {
+    $("hold-save").onclick = () => saveFromText($("hold-text").value);
+    $("hold-file").onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      if (/pdf$/i.test(f.type) || /\.pdf$/i.test(f.name)) { hmsg("PDF files cannot be read here. Export your holdings as CSV from your broker, or paste the rows above.", true); return; }
+      if (f.size > 1e6) { hmsg("That file is too large for a holdings list.", true); return; }
+      const text = await f.text();
+      $("hold-text").value = text;
+      saveFromText(text);
+    };
+    $("hold-export").onclick = () => {
+      if (!holdings.length) { hmsg("Nothing to export yet.", true); return; }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([Hd.toCsv(holdings)], { type: "text/csv" }));
+      a.download = "market-tailwind-holdings.csv";
+      document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    $("hold-clear").onclick = () => {
+      if (!holdings.length || !confirm("Remove all holdings and change history from this browser?")) return;
+      holdings = []; lsDel(HOLD_KEY);
+      for (const h of Object.keys(E.HORIZONS)) { lsDel(SNAP_KEY + h); lsDel(SEEN_KEY + h); }
+      $("hold-text").value = ""; hmsg("All holdings removed from this browser.");
+      render();
+    };
+    $("hold-text").value = holdings.length ? Hd.toCsv(holdings) : "";
+  }
+
+  function renderHoldings() {
+    const editor = $("hold-editor");
+    if (!holdings.length && !editor.dataset.touched) { editor.open = true; editor.dataset.touched = "1"; }
+    const sigs = holdings.map(signalFor);
+    const covered = sigs.filter((x) => x.covered), uncovered = sigs.filter((x) => !x.covered);
+
+    // --- concentration (weights within each currency)
+    const valued = covered.filter((x) => x.h.qty).map((x) => ({ t: x.t, value: x.h.qty * x.row.price, currency: x.currency, group: x.group }));
+    const sums = Hd.summarize(valued);
+    const weightOf = new Map(sums.flatMap((c) => c.items.map((i) => [i.t, i.weight])));
+    $("hold-summary").innerHTML = sums.map((c) => `<div class="cur-block"><h3>${esc(c.currency)} holdings <small>${esc(money(c.total, c.currency))} · ${c.count} position${c.count === 1 ? "" : "s"}</small></h3>`
+      + `<p class="note" style="margin:2px 0 6px">Largest position: <b>${esc(c.top.t)}</b> at ${(c.top.weight * 100).toFixed(0)}% of your ${esc(c.currency)} holdings. Split by sector:</p>`
+      + c.groups.map((g) => `<div class="bar-row"><span class="bar-label" title="${esc(g.name)}">${esc(g.name)}</span><span class="bar"><i style="width:${(g.weight * 100).toFixed(1)}%"></i></span><span class="bar-val">${(g.weight * 100).toFixed(0)}%</span></div>`).join("") + `</div>`).join("");
+
+    // --- what changed since the previous update (per horizon; baseline only moves on a NEW data update)
+    const cur = { asOf: `${data.generated}|${newsData ? newsData.generated : ""}`, items: {} };
+    for (const x of covered) cur.items[x.t] = Hd.snapshotEntry({ trend: x.row.trend_label, rank: x.rank, news: x.news ? { word: x.newsWord, n: x.news.n } : null, fund: x.fund, price: x.row.price });
+    const rolled = Hd.rollSnapshots(lsGet(SNAP_KEY + state.horizon), lsGet(SEEN_KEY + state.horizon), cur);
+    if (holdings.length) { lsSet(SNAP_KEY + state.horizon, rolled.last); lsSet(SEEN_KEY + state.horizon, rolled.seen); }
+    const changes = Hd.diffSnapshots(rolled.seen, cur);
+    const hz = E.HORIZONS[state.horizon];
+    let chHtml = "";
+    if (covered.length) {
+      if (!rolled.seen) chHtml = `<p class="note">Change tracking starts now. After the next data update (twice a day), this section lists what moved for your holdings: trend, news tone, ranking, fundamentals check, and price moves of 5% or more.</p>`;
+      else if (!changes.length) chHtml = `<div class="changes"><h3>What changed</h3><p class="note">No changes in the tracked signals since the previous update (${esc(rolled.seen.asOf.split("|")[0])}).</p></div>`;
+      else {
+        const by = {};
+        for (const c of changes) (by[c.t] ||= []).push(c);
+        chHtml = `<div class="changes"><h3>What changed since the previous update <small class="muted">(${esc(rolled.seen.asOf.split("|")[0])})</small></h3>`
+          + `<p class="note" style="margin:2px 0">▲ signal improved · ▼ signal weakened. These describe movement in the app's indicators; they are not instructions. Ranking is for the <b>${esc(hz.label.toLowerCase())}</b> horizon.</p><ul>`
+          + Object.entries(by).map(([t, cs]) => `<li><b>${esc(t)}</b>${shortName(t) ? ` <span class="muted">${esc(shortName(t))}</span>` : ""}<br>${cs.map((c) => `<span class="${c.dir === "▲" ? "up" : "down"}">${c.dir}</span> ${esc(c.text)}`).join("<br>")}</li>`).join("") + `</ul></div>`;
+      }
+    }
+    $("hold-changes").innerHTML = chHtml;
+
+    // --- table
+    const wrap = $("hold-table-wrap");
+    wrap.hidden = !covered.length;
+    if (covered.length) {
+      const head = ["Stock", "Shares", "Value", "Weight", "P/L", "Trend", "1 week", "1 month", "News", "Fundamentals", "Rank"];
+      const pc = (v) => (Number.isFinite(v) ? `<td class="${cls(v)}">${E.pct(v, 1, true)}</td>` : "<td>–</td>");
+      const rows = covered.map((x) => {
+        const r = x.row, h = x.h, val = h.qty ? h.qty * r.price : null, w = weightOf.get(x.t);
+        const pl = h.cost ? r.price / h.cost - 1 : null;
+        const rank = x.rank ? `#${x.rank.n}/${x.rank.of}` : x.sc.stock ? `#${x.sc.k} in ${esc(x.sc.sector.name)}` : "–";
+        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
+          + `<td>${val ? esc(money(val, x.currency)) : "–"}</td><td>${w != null ? (w * 100).toFixed(0) + "%" : "–"}</td>${pc(pl)}<td>${esc(r.trend_label)}</td>${pc(r.ret_5)}${pc(r.ret_21)}`
+          + `<td>${x.newsWord ? esc(x.newsWord) : "–"}</td><td>${x.fund ? esc(x.fund) : x.info?.type === "ETF" ? "ETF" : "–"}</td><td>${rank}</td></tr>`;
+      }).join("");
+      const table = $("hold-table");
+      table.innerHTML = `<thead><tr>${head.map((x) => `<th>${x}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
+      wireExpandable(table, openRows.hold, holdingDetail);
+    }
+
+    // --- not covered
+    $("hold-uncovered").innerHTML = uncovered.length
+      ? `<p class="note"><b>No data here for ${uncovered.map((x) => esc(x.t)).join(", ")}.</b> The app only has prices for the stocks and ETFs it tracks (see the Rankings and Sectors tabs), so these show no signals. Check the spelling, or use the broker's Yahoo Finance symbol (Singapore stocks end in .SI).</p>` : "";
+    if (!holdings.length) $("hold-uncovered").innerHTML = `<p class="note">No holdings yet. Open "Add or edit holdings" above, paste rows or load a CSV file, then save.</p>`;
+
+    // --- headlines that mention a holding
+    const asOf = newsAsOf(), set = new Set(holdings.map((h) => h.t));
+    const items = newsData ? newsData.items.filter((i) => i.tickers.some((t) => set.has(t)) && asOf - Date.parse(i.time) <= E.NEWS_DAYS * 864e5)
+      .sort((a, b) => Date.parse(b.time) - Date.parse(a.time)).slice(0, 12) : [];
+    $("hold-news-title").hidden = !items.length;
+    $("hold-news").innerHTML = items.map((i) => articleHtml(i, { sug: set })).join("");
   }
 
   /* ---------- news tab ---------- */

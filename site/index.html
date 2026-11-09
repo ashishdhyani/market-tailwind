@@ -81,6 +81,7 @@
     <button role="tab" data-tab="rank" aria-selected="true">Rankings</button>
     <button role="tab" data-tab="sectors" aria-selected="false">Sectors</button>
     <button role="tab" data-tab="news" aria-selected="false">News</button>
+    <button role="tab" data-tab="hold" aria-selected="false">Holdings</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
     <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
     <button role="tab" data-tab="about" aria-selected="false">About</button>
@@ -111,6 +112,31 @@
     <div id="sec-news"></div>
   </section>
 
+  <section id="tab-hold" class="panel" hidden>
+    <p class="note priv"><b>Private to this browser.</b> Your holdings are never uploaded and are not stored in the GitHub repo. They stay on this device only (the page password does not encrypt them here, and they do not sync to other devices). This tab shows how the app's signals look for stocks you own and what changed. <b>It does not tell you to buy or sell.</b></p>
+    <details class="editor" id="hold-editor">
+      <summary>Add or edit holdings</summary>
+      <div class="ed-body">
+        <p class="note">One stock per line: <b>ticker, shares, average cost</b> (shares and cost are optional). A CSV export from your broker works; a header row like <i>Symbol, Quantity, Avg Price</i> is understood. Singapore stocks use the <i>.SI</i> suffix (for example D05.SI).</p>
+        <textarea id="hold-text" rows="8" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Symbol,Quantity,Avg Price&#10;AAPL,10,150.50&#10;XOM,20,&#10;D05.SI,100,33.20"></textarea>
+        <div class="ed-actions">
+          <button type="button" id="hold-save" class="btn">Save holdings</button>
+          <label class="btn alt" for="hold-file">Load CSV file…</label>
+          <input type="file" id="hold-file" accept=".csv,.txt,text/csv,text/plain" hidden>
+          <button type="button" id="hold-export" class="link">Export CSV</button>
+          <button type="button" id="hold-clear" class="link danger">Clear all</button>
+        </div>
+        <p id="hold-msg" class="note" role="status"></p>
+      </div>
+    </details>
+    <div id="hold-summary"></div>
+    <div id="hold-changes"></div>
+    <div class="table-wrap" id="hold-table-wrap" hidden><table id="hold-table"></table></div>
+    <div id="hold-uncovered"></div>
+    <h2 id="hold-news-title" hidden>Headlines mentioning your holdings</h2>
+    <ul id="hold-news" class="articles"></ul>
+  </section>
+
   <section id="tab-chart" class="panel" hidden>
     <label class="select">Ticker <select id="ticker"></select></label>
     <div id="price-chart" class="chart"></div>
@@ -138,6 +164,7 @@
   <section id="tab-about" class="panel" hidden>
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
     <p><b>Important:</b> Market Tailwind is a research tool, not financial advice. The rankings, sector views and suggested stocks and ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and don't rely on them. See "Read the full disclaimer" at the top of the page.</p>
+    <p><b>Holdings:</b> the Holdings tab shows how the app's signals look for stocks you own (trend, news tone, ranking, fundamentals check, price moves) and lists what changed since the previous data update. Your holdings are kept only in this browser's storage. It is a monitor, not a source of buy or sell instructions.</p>
     <p><b>Sectors and News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and six large stocks in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks and the sector ETF are the suggestions. The News tab lists the headlines behind each sector, ranked by impact: a headline's impact is its share of the sector's total tone signal (newer and stronger-toned headlines count more). Market-wide headlines at the top of the News tab are for context only and are not part of any score.</p>
     <p><b>Horizons:</b> <i>Long-term</i> is the model above. <i>1 month</i>, <i>2 weeks</i> and <i>1 week</i> replace both momentum terms (55% together) with the return over just that recent window; trend, volatility and closeness to the 1-year high stay the same. Short windows chase what moved most recently, which is noisy and often partly reverses, so treat them as watch-list ideas and compare them on the Backtest tab.</p>
     <p><b>Backtest:</b> rebalanced on the last trading day of each month (Long-term, 1 month), every second week (2 weeks) or every week (1 week), matching the horizon you picked. The trade fills one trading day later, so the signal never sees prices it could not have acted on. Shorter horizons trade more often, so trading costs matter much more.</p>
@@ -152,6 +179,7 @@
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-basic-dist-min@2.35.2/plotly-basic.min.js"></script>
 <script src="engine.js"></script>
 <script src="fundamentals.js"></script>
+<script src="holdings.js"></script>
 <script src="detail.js"></script>
 <script src="app.js"></script>
 <script src="refresh.js"></script>

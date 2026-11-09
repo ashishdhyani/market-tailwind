@@ -377,7 +377,7 @@
     return { sectors, hasNews, newsGenerated: news ? news.generated : null, asOf: sd.dates[sd.dates.length - 1] };
   }
 
-  const api = { sectorAnalysis, newsStats, rankedHeadlines, NEWS_DAYS, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  const api = { TREND_LABEL, sectorAnalysis, newsStats, rankedHeadlines, NEWS_DAYS, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(typeof self !== "undefined" ? self : this);
