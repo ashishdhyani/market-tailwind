@@ -592,8 +592,32 @@
       + `<p class="note">A calculation from the numbers you entered, not a recommendation. Real orders fill at live prices, which differ from the last close.</p>`;
   }
 
+  /* Add tickers from one of the app's own lists to the basket (no weights: equal split unless the user types some). */
+  function addToBasket(tickers, source) {
+    const box = $("plan-basket"), have = new Set(Hd.parseBasket(box.value, knownTickers()).items.map((i) => i.t));
+    const fresh = [...new Set(tickers)].filter((t) => t && !have.has(t));
+    if (fresh.length) box.value = (box.value.trim() ? box.value.replace(/\s+$/, "") + "\n" : "") + fresh.join("\n");
+    savePlan();
+    const msg = $("plan-msg");
+    msg.style.color = "";
+    msg.textContent = fresh.length
+      ? `Added ${fresh.length} from ${source}: ${fresh.join(", ")}. Check them (see the ⚠ marks and each stock's evidence) and remove any you do not want, then Calculate.`
+      : `Nothing new to add from ${source}: those are already in the basket (or the list is empty).`;
+  }
+
   function bindPlan() {
     restorePlan();
+    $("plan-from-rank").onclick = () => {
+      try {
+        const u = universe(), rows = E.latestTable(u.tickers, u.prices, u.feats, dates.length, state.horizon).rows.slice(0, state.topN);
+        addToBasket(rows.map((r) => r.ticker), `the Rankings top ${state.topN} (${E.HORIZONS[state.horizon].label.toLowerCase()})`);
+      } catch (err) { $("plan-msg").textContent = err.message; }
+    };
+    $("plan-from-pb").onclick = () => addToBasket(pullbackScreen().res.shown.slice(0, 5).map((r) => r.t), "the top Pullbacks");
+    $("plan-from-sec").onclick = () => {
+      const res = sectorResult();
+      addToBasket(res ? res.sectors.slice(0, 3).map((x) => x.stocks[0] && x.stocks[0].ticker) : [], "the top 3 sectors");
+    };
     $("plan-go").onclick = calcPlan;
     for (const id of ["plan-cash", "plan-cur", "plan-reserve", "plan-fee", "plan-frac", "plan-basket"]) $(id).addEventListener("change", savePlan);
     $("plan-clear").onclick = () => {
@@ -606,7 +630,7 @@
 
   /* ---------- pullbacks: a screen, the same for everyone ---------- */
 
-  function renderPullbacks() {
+  function pullbackScreen() {
     const w = P.WINDOWS[state.pbWindow], drop = state.pbDrop / 100;
     const cands = [];
     for (const t of data.watchlist) {
@@ -623,7 +647,11 @@
       c.news = nw && nw.n ? nw : null;
       c.headlines = nw ? nw.items.slice(0, 2) : [];
     }
-    const res = P.screen(cands, { window: state.pbWindow, minDrop: drop, limit: 25 });
+    return { res: P.screen(cands, { window: state.pbWindow, minDrop: drop, limit: 25 }), w, drop };
+  }
+
+  function renderPullbacks() {
+    const { res, w } = pullbackScreen();
     const scope = state.pbGroup ? `in ${state.pbGroup}` : "in your universe";
     const pool = [...state.active].filter((t) => infoOf(t) && infoOf(t).type !== "ETF" && (!state.pbGroup || groupOf[t] === state.pbGroup)).length;
     $("pb-summary").textContent = state.pbGroup && !state.groups.has(state.pbGroup)

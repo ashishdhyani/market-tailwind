@@ -271,3 +271,5 @@ tr.extra, tr.detail-row.extra { display: none; }
 .pb-ev.for li::marker { color: var(--pos); } .pb-ev.against li::marker { color: var(--neg); }
 
 .plan-grid .wide { grid-column: 1 / -1; }
+
+.plan-import { background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0 10px; }

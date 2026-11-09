@@ -155,6 +155,14 @@
           <label>Fee per order<input id="plan-fee" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
         </div>
         <label class="chk"><input id="plan-frac" type="checkbox"> Allow part shares</label>
+        <div class="plan-import">
+          <p class="note" style="margin:0 0 6px"><b>Start from one of the app's lists</b> (the same for everyone; you choose which, and you can edit the basket afterwards). Rankings favour what has <i>risen</i>; Pullbacks favour what has <i>fallen</i>: opposite ideas, so mixing them is your call.</p>
+          <div class="ed-actions">
+            <button type="button" id="plan-from-rank" class="btn alt">Top Rankings picks</button>
+            <button type="button" id="plan-from-pb" class="btn alt">Top Pullbacks</button>
+            <button type="button" id="plan-from-sec" class="btn alt">Leader of the top 3 sectors</button>
+          </div>
+        </div>
         <label for="plan-basket"><b>Your basket:</b> one stock or ETF per line, with an optional weight %. Leave weights blank for an equal split.</label>
         <textarea id="plan-basket" rows="6" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="NVDA 40&#10;MSFT 30&#10;XOM"></textarea>
         <div class="ed-actions">

@@ -48,7 +48,7 @@ The Pullbacks tab lists stocks that fell by at least X% over a chosen window (1 
 
 ## Cash planner (a calculator, not advice)
 
-In the Holdings tab, enter an amount of cash, the stocks or ETFs **you** are considering and optional weights; the planner works out whole shares, dollar amounts, fees and cash left (and can keep a % back as cash), and shows the app's signals next to each pick plus a sector split. It never chooses what to buy. Each basket must be in one currency (no FX conversion). Inputs stay in your browser only. The arithmetic is tested, including 400 randomised cases (`tests/test_holdings.js`).
+In the Holdings tab, enter an amount of cash, the stocks or ETFs **you** are considering and optional weights; the planner works out whole shares, dollar amounts, fees and cash left (and can keep a % back as cash), and shows the app's signals next to each pick plus a sector split. It never chooses what to buy. To save typing you can start the basket from one of the app's own lists (the top Rankings picks, the top Pullbacks, or the leader of each of the top 3 sectors), which are the same for everyone, and then edit it; the app does not blend the analyses into a portfolio for you. Each basket must be in one currency (no FX conversion). Inputs stay in your browser only. The arithmetic is tested, including 400 randomised cases (`tests/test_holdings.js`).
 
 ## ETFs and quantum stocks
 
