@@ -84,6 +84,7 @@
     <button role="tab" data-tab="news" aria-selected="false">News</button>
     <button role="tab" data-tab="pull" aria-selected="false">Pullbacks</button>
     <button role="tab" data-tab="hold" aria-selected="false">Holdings</button>
+    <button role="tab" data-tab="look" aria-selected="false">Lookup</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
     <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
     <button role="tab" data-tab="score" aria-selected="false">Scoreboard</button>
@@ -220,6 +221,29 @@
     <ul id="hold-news" class="articles"></ul>
   </section>
 
+  <section id="tab-look" class="panel" hidden>
+    <h2>Look up any stock or ETF</h2>
+    <p class="note">Type any ticker Yahoo Finance knows, <b>including ones that are not in this app's lists</b> (SOFI, TSM, QQQM, D05.SI, 0700.HK, BRK-B). You get one report: price and momentum against SPY, key numbers, financial statements, analysts, earnings, dividends, insiders, news, and points in its favour and of caution. It describes the stock and is not advice.</p>
+    <details class="how"><summary>How this works and what is public</summary><p class="note">Yahoo blocks web pages from asking it directly, so a GitHub job fetches the report and saves it. A new lookup takes about 1 to 2 minutes; a saved report under 6 hours old opens instantly. Saved reports live on the public <code>lookups</code> branch of this repository, so anyone can see <b>which symbols were looked up</b> (not who looked them up, and never your holdings). Asking for a new lookup needs the same GitHub token as the Refresh button.</p></details>
+    <form id="lk-form" class="lk-form" autocomplete="off">
+      <input id="lk-symbol" type="text" inputmode="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="14" placeholder="Symbol, e.g. SOFI" aria-label="Ticker symbol">
+      <button type="submit" id="lk-go" class="btn">Look up</button>
+    </form>
+    <p id="lk-msg" class="note lk-msg" hidden></p>
+    <div id="lk-token-form" class="refresh-form" hidden>
+      <p><b>One-time setup:</b> asking GitHub to run a lookup needs a GitHub token. It is the same one the ↻ Refresh button uses, is kept only in this browser, and is sent only to api.github.com.</p>
+      <ol>
+        <li>Open <a id="lk-token-link" target="_blank" rel="noopener noreferrer">GitHub → New fine-grained token</a>.</li>
+        <li>Repository access: <i>Only select repositories</i> → <b id="lk-repo"></b>.</li>
+        <li>Permissions → Repository permissions → <b>Actions: Read and write</b>. Create it and paste it here.</li>
+      </ol>
+      <input id="lk-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…">
+      <div class="refresh-actions"><button type="button" id="lk-token-save" class="btn">Save and look up</button> <button type="button" id="lk-token-forget" class="link">Forget saved token</button></div>
+    </div>
+    <div id="lk-recent"></div>
+    <div id="lk-report"></div>
+  </section>
+
   <section id="tab-chart" class="panel" hidden>
     <label class="select">Ticker <select id="ticker"></select></label>
     <div id="price-chart" class="chart"></div>
@@ -257,6 +281,7 @@
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
     <p><b>Important:</b> Market Tailwind is a research tool, not financial advice. The rankings, sector views and suggested stocks and ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and don't rely on them. See "Read the full disclaimer" at the top of the page.</p>
     <p><b>Companies that report a loss:</b> the ranking looks at price behaviour only, so a stock with negative ROE or net profit margin (about 4% of the list) can still rank high on momentum. These carry a ⚠ and a warning in their detail panel. In Controls, "Hide companies that report a loss" removes them from Rankings, Sectors and the chart list. It does not change the backtest, because it uses today's financials and applying them to the past would be look-ahead bias. A one-off write-down can also cause a reported loss, so check the reason.</p>
+    <p><b>Lookup:</b> the Lookup tab builds a full report for any stock or ETF Yahoo Finance knows, even one that is not in this app. A GitHub job fetches it (about 1 to 2 minutes, needs the same token as Refresh) and saves it on a public branch, so the symbols looked up are visible to anyone. The report lists points in its favour and of caution, from price trend, statements, analysts, earnings, insiders and news. It describes the company and is not advice.</p>
     <p><b>Scoreboard:</b> the Scoreboard tab judges the app's own default picks using a log recorded on every refresh (committed to GitHub, so the history shows when each list was written). Results appear as the weeks pass and carry an "independent windows" count, because daily snapshots overlap. It is honest evidence but a small sample early on, and it is not advice.</p>
     <p><b>Event risk:</b> a 📅 marker means the company is expected to report earnings within two weeks, when stocks often move sharply either way. Dates come from Yahoo and can shift; no marker means no date is known, not that nothing is coming.</p>
     <p><b>Risk check:</b> the Holdings tab and the cash planner show how your positions have behaved together over up to three years: swings, worst falls, beta, correlation and a replay of the market's worst stretches. It describes the past and is not a forecast.</p>
@@ -284,6 +309,9 @@
 <script src="picks.js"></script>
 <script src="scoreboard.js"></script>
 <script src="detail.js"></script>
+<script src="lookup.js"></script>
+<script src="lookup_view.js"></script>
+<script src="lookup_ui.js"></script>
 <script src="app.js"></script>
 <script src="refresh.js"></script>
 </body>

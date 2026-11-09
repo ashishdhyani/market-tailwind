@@ -95,5 +95,6 @@
     $("refresh-forget").hidden = !store.get();
     $("refresh-btn").addEventListener("click", () => { $("refresh-forget").hidden = !store.get(); });
   }
+  window.GH = { OWNER, REPO, store };   // shared with the Lookup tab: same repo, same token
   init();
 })();

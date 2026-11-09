@@ -40,11 +40,27 @@ streamlit run app.py      # open the dashboard
 | `export_web.py` | Export prices from SQLite to `site/data.json` and `site/sector_data.json`. |
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
+| `lookup.py` | Fetches a full report for one stock or ETF (any symbol Yahoo knows) as JSON: profile, key numbers, 5 years of prices, statements, analysts, earnings, dividends, holders, insiders, news. Used by the Lookup tab. |
+| `tools/publish_lookup.py` | Saves one lookup result on the `lookups` branch (orphan branch, newest 60 kept). |
+| `.github/workflows/lookup.yml` | The on-demand job the Lookup tab starts (`workflow_dispatch`, input: symbol). |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
 ## Scoreboard (forward, out-of-sample)
 
 Backtests here are flattered by survivorship bias, so the Scoreboard keeps a record that cannot be: every refresh, `tools/snapshot_picks.mjs` appends the app's **default** picks (Rankings top 5 for each of the six horizons, Pullbacks top 5, and the leader of each of the top 3 sectors) to `site/picks_log.json`, which the workflow commits. Git history therefore shows when each list was written, before anyone knew how it turned out. The Scoreboard tab then measures those exact lists: equal-weighted, bought at the next trading day's close (the same one-day delay as the backtest), against SPY after 6 months, 3 months and 1 month (1 week is not shown: too noisy), before costs and taxes. The 1-month table fills in first, about a month after the first snapshot; the 6-month table needs about half a year of history. Nothing is backfilled. A damaged log makes the tool stop instead of overwriting it. Early on it is a tiny sample (daily lists overlap), so every average carries its count, a standard error and the number of independent windows. Logic and tests: `site/picks.js`, `site/scoreboard.js`, `tests/test_scoreboard.js`.
+
+## Lookup (any stock or ETF)
+
+The Lookup tab takes any symbol Yahoo Finance knows, including ones outside the app's lists (SOFI, TSM, QQQM, `D05.SI`, `0700.HK`, `BRK-B`), and builds one report: price and momentum against SPY (and where it would sit among the ~585 stocks and ETFs the app tracks), key numbers with the same rules of thumb as the Rankings, yearly and quarterly statements, analyst ratings and targets, earnings history and surprises, dividends, insider transactions, big holders, news tone, and a plain list of **points in its favour and points of caution**. It describes the stock and never says buy or sell.
+
+How it works: Yahoo blocks web pages from asking it directly (checked: it fails CORS), so the page starts the `Look up one stock` GitHub Actions job (`workflow_dispatch`, same token as the Refresh button, "Actions: Read and write"). The job runs `lookup.py`, then `tools/publish_lookup.py` writes `data/<SYMBOL>.json` and `index.json` to the orphan `lookups` branch (never `main`, so no site redeploy). The page polls `raw.githubusercontent.com` until the new file appears, which takes about 1 to 2 minutes. A saved report under 6 hours old opens instantly and the recent list is shared.
+
+Things to know:
+- **It is public by design.** The repository is public, so anyone can see which symbols were looked up on the `lookups` branch. Not who looked them up, and never your holdings. The tab says so.
+- The result file is treated as untrusted: `site/lookup.js` rebuilds it from whitelisted fields and types, links must be http(s), and every string is escaped.
+- Each Yahoo section is fetched separately; if one is missing (funds have no statements, new listings have little history) the others still show and the report says which are unavailable.
+- A foreign company listed in another currency (an ADR such as TSM reports in TWD) has its price-based ratios (price/sales, price/book, EV/EBITDA, free-cash-flow yield) hidden, because Yahoo mixes the two currencies. Statements are shown in the reporting currency.
+- Tests: `tests/test_lookup.py` (fetcher helpers and the real fixtures), `tests/test_lookup.js` (sanitising, hostile input, hand-checked price/statement maths, evidence rules, rendering), `tests/test_publish_lookup.py` (the branch publisher against a throwaway bare repo, including a push race). The GitHub Actions leg itself can only be proven by running the workflow once after deploying.
 
 ## Other investments (Endowus, CPF, SRS, bank…)
 

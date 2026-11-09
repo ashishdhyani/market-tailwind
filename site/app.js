@@ -42,6 +42,12 @@
     bindOther();
     bindPlan();
     bindPullbacks();
+    window.LookupUI.init({
+      spy: () => (benchSeries.SPY ? { dates, close: Array.from(benchSeries.SPY) } : null),
+      universe: () => [...watchlistRanks().map.values()],
+      inApp: (sym) => { const w = watchlistRanks(), r = w.map.get(sym); return r ? { rank: r.rank, of: w.total, label: E.HORIZONS[state.horizon].label } : null; },
+      plot: (id, traces) => Plotly.react(id, traces, plotLayout({}), plotCfg),
+    });
     $("status").hidden = true;
     $("app").hidden = false;
     render();
@@ -151,7 +157,7 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "sectors", "news", "pull", "hold", "chart", "bt", "score", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "news", "pull", "hold", "look", "chart", "bt", "score", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
     const tooFew = (state.tab === "bt" ? state.universe.size : state.active.size) < 6 && ["rank", "chart", "bt", "pull"].includes(state.tab);
@@ -164,6 +170,7 @@
     if (state.tab === "sectors") renderSectors();
     if (state.tab === "news") renderNews();
     if (state.tab === "hold") renderHoldings();
+    if (state.tab === "look") window.LookupUI.render();
     if (state.tab === "pull") renderPullbacks();
     if (state.tab === "score") renderScoreboard();
     if (state.tab === "rank") renderRank();
