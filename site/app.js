@@ -678,10 +678,14 @@
     const labels = Object.fromEntries(Pk.LISTS.map((l) => [l.key, l.label]));
     const res = Sb.evaluate({ log: picksLog, series: (t) => series[t] || etfSeries[t], dates, bench: benchSeries.SPY, labels });
     const order = Pk.LISTS.map((l) => l.key).filter((k) => res.lists[k]);
-    const firstD = new Date(res.firstDate + "T00:00:00Z"), when = new Date(firstD.getTime() + 8 * 864e5).toISOString().slice(0, 10);
+    // First results: a horizon of D trading days needs about D*7/5 calendar days after the first snapshot, plus the 1-day entry delay.
+    const firstD = new Date(res.firstDate + "T00:00:00Z").getTime();
+    const eta = (days) => new Date(firstD + (Math.ceil((days * 7) / 5) + 3) * 864e5).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const schedule = [...Sb.HORIZONS].reverse().map((h) => `${h.label}: ${eta(h.days)}`).join(" · ");
     const anyDone = order.some((k) => Sb.HORIZONS.some((h) => res.lists[k].stats[h.days].n > 0));
     status.textContent = `${res.snapshots} daily snapshot${res.snapshots === 1 ? "" : "s"} recorded, ${res.firstDate} to ${res.lastDate}. `
-      + (anyDone ? "Results so far are listed below; treat them with great caution until there are dozens." : `Too early for results: the first 1-week results arrive about a week after the first snapshot (around ${when}).`);
+      + (anyDone ? "Results so far are listed below; treat them with great caution until there are dozens. " : "Too early for results. ")
+      + `First results for each table arrive around: ${schedule}.`;
     const pcell = (v, signed) => `<td class="${cls(v)}">${E.pct(v, 1, signed)}</td>`;
     for (const h of Sb.HORIZONS) {
       if (!order.some((k) => res.lists[k].stats[h.days].n > 0)) continue;

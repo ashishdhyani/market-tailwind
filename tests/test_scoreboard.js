@@ -4,12 +4,15 @@ let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log("FAIL", m); } }
 const near = (a, b, m, tol = 1e-9) => ok(Math.abs(a - b) <= tol, `${m}: got ${a}, want ${b}`);
 
 // ---------- scoreboard maths on hand-built prices ----------
+// the hand-built series are 100 days long, so these tests use short horizons; the real defaults are checked below
+const TEST_H = [{ days: 5, label: "1 week" }, { days: 21, label: "1 month" }, { days: 63, label: "3 months" }];
+const EV = (o) => S.evaluate({ horizons: TEST_H, ...o });
 const N = 100, dates = Array.from({ length: N }, (_, i) => "d" + String(i).padStart(3, "0"));
 const grow = (rate, jumpAt = null, jump = 0) => { const p = new Float64Array(N); p[0] = 100; for (let i = 1; i < N; i++) p[i] = p[i - 1] * (1 + rate) * (i === jumpAt ? 1 + jump : 1); return p; };
 const A = grow(0.01), B = grow(0.00), BENCH = grow(0.001);
 const series = (t) => ({ A, B }[t]);
 const labels = { "rank:long": "Rankings (long-term)" };
-const ev = (snaps) => S.evaluate({ log: { snapshots: snaps }, series, dates, bench: BENCH, labels });
+const ev = (snaps) => EV({ log: { snapshots: snaps }, series, dates, bench: BENCH, labels });
 
 // one snapshot at d010: bought at d011's close, measured 5 / 21 / 63 days later
 let r = ev([{ date: "d010", lists: { "rank:long": ["A", "B"] } }]);
@@ -23,9 +26,9 @@ ok(r.lists["rank:long"].label === "Rankings (long-term)" && r.snapshots === 1 &&
 // the one-day delay: a jump between the snapshot date and the next close must NOT be credited to the pick
 {
   const J = grow(0, 11, 0.20);                                                  // +20% arrives on d011, the day after the snapshot
-  const r2 = S.evaluate({ log: { snapshots: [{ date: "d010", lists: { x: ["J"] } }] }, series: (t) => ({ J })[t], dates, bench: BENCH });
+  const r2 = EV({ log: { snapshots: [{ date: "d010", lists: { x: ["J"] } }] }, series: (t) => ({ J })[t], dates, bench: BENCH });
   near(r2.lists.x.rows[0].byH[5].basket, 0, "entry is d011's close, so the d011 jump is not counted");
-  const r3 = S.evaluate({ log: { snapshots: [{ date: "d009", lists: { x: ["J"] } }] }, series: (t) => ({ J })[t], dates, bench: BENCH });
+  const r3 = EV({ log: { snapshots: [{ date: "d009", lists: { x: ["J"] } }] }, series: (t) => ({ J })[t], dates, bench: BENCH });
   near(r3.lists.x.rows[0].byH[5].basket, 0.20, "an earlier snapshot does capture it", 1e-9);
 }
 
@@ -50,16 +53,29 @@ ok(st.windows === 5, "independent 5-day windows spanned by d010..d030: " + st.wi
 ok(r.lists.k.stats[63].n === 3 && r.lastDate === "d030", "63-day results exist for all three (d031 + 63 = d094 <= d099)");
 
 // garbage in, nothing out (never a crash)
-for (const bad_ of [null, undefined, {}, { snapshots: "x" }, { snapshots: [] }]) { const z = S.evaluate({ log: bad_, series, dates, bench: BENCH }); ok(z.snapshots === 0 && Object.keys(z.lists).length === 0, "empty log " + JSON.stringify(bad_)); }
+for (const bad_ of [null, undefined, {}, { snapshots: "x" }, { snapshots: [] }]) { const z = EV({ log: bad_, series, dates, bench: BENCH }); ok(z.snapshots === 0 && Object.keys(z.lists).length === 0, "empty log " + JSON.stringify(bad_)); }
 
 // real prices: a past snapshot of two real stocks gives finite numbers that match a manual calculation
 {
   const d = require("../site/data.json"), real = {}; for (const [t, v] of Object.entries(d.prices)) real[t] = Float64Array.from(v, (x) => (x === null ? NaN : x));
-  const i = d.dates.indexOf("2025-06-02"), rr = S.evaluate({ log: { snapshots: [{ date: "2025-06-02", lists: { k: ["AAPL", "JPM"] } }] }, series: (t) => real[t], dates: d.dates, bench: real.SPY });
+  const i = d.dates.indexOf("2025-06-02"), rr = EV({ log: { snapshots: [{ date: "2025-06-02", lists: { k: ["AAPL", "JPM"] } }] }, series: (t) => real[t], dates: d.dates, bench: real.SPY });
   const e = i + 1, x = (t, h) => real[t][e + h] / real[t][e] - 1;
   near(rr.lists.k.rows[0].byH[21].basket, (x("AAPL", 21) + x("JPM", 21)) / 2, "real data: 1 month basket");
   near(rr.lists.k.rows[0].byH[21].bench, x("SPY", 21), "real data: 1 month SPY");
   ok(Number.isFinite(rr.lists.k.rows[0].sinceEntry.basket), "real data: since entry");
+}
+
+// the app's real horizons: 6 months, 3 months, 1 month (longest first); no 1-week table
+ok(JSON.stringify(S.HORIZONS) === JSON.stringify([{ days: 126, label: "6 months" }, { days: 63, label: "3 months" }, { days: 21, label: "1 month" }]), "default horizons");
+{
+  const long = Array.from({ length: 400 }, (_, i) => "e" + String(i).padStart(3, "0")), g = (rate) => { const p = new Float64Array(400); p[0] = 100; for (let i = 1; i < 400; i++) p[i] = p[i - 1] * (1 + rate); return p; };
+  const GA = g(0.001), GB = g(0.0005);
+  const z = S.evaluate({ log: { snapshots: [{ date: "e010", lists: { k: ["A"] } }, { date: "e300", lists: { k: ["A"] } }] }, series: () => GA, dates: long, bench: GB });
+  const st = z.lists.k.stats;
+  ok(Object.keys(st).map(Number).sort((a, b) => b - a).join() === "126,63,21" && st[126].n === 1 && st[63].n === 2 && st[21].n === 2, "defaults: the 6-month result needs 126 trading days after entry: " + JSON.stringify([st[126].n, st[63].n, st[21].n]));
+  near(z.lists.k.rows[0].byH[126].basket, Math.pow(1.001, 126) - 1, "6-month return");
+  near(z.lists.k.rows[0].byH[126].bench, Math.pow(1.0005, 126) - 1, "6-month benchmark");
+  ok(z.lists.k.rows[0].byH[5] === undefined, "no 1-week result is produced any more");
 }
 
 // ---------- the default lists (picks.js) ----------

@@ -1,14 +1,15 @@
 /* Scoreboard: how did the lists the app recorded in advance actually do? Pure maths, no DOM.
 
    For each recorded snapshot the basket is equal-weighted and "bought" at the NEXT trading day's close after the
-   snapshot date (the same one-day delay the backtest uses), then measured after 1 week (5 trading days), 1 month
-   (21) and 3 months (63), against the benchmark over the same days. Returns are before costs and taxes. Nothing is
+   snapshot date (the same one-day delay the backtest uses), then measured after 6 months (126 trading days),
+   3 months (63) and 1 month (21), against the benchmark over the same days. Returns are before costs and taxes. Nothing is
    backfilled, so this is out-of-sample evidence, but early on it is a tiny sample and consecutive daily snapshots
    overlap heavily, so the number of independent windows is reported next to every average. */
 (function (root) {
   "use strict";
 
-  const HORIZONS = [{ days: 5, label: "1 week" }, { days: 21, label: "1 month" }, { days: 63, label: "3 months" }];
+  // Longest first. Each needs that many trading days after entry before it has a result.
+  const HORIZONS = [{ days: 126, label: "6 months" }, { days: 63, label: "3 months" }, { days: 21, label: "1 month" }];
   const mean = (a) => a.reduce((s, x) => s + x, 0) / a.length;
   function sd(a) { if (a.length < 2) return 0; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1)); }
 
@@ -26,7 +27,7 @@
 
   /* log: {snapshots:[{date, lists:{key:[tickers]}}]}; series(t) -> Float64Array aligned with `dates`; labels: {key: text}.
      Returns { snapshots, firstDate, lastDate, lists: {key: {label, rows, stats}} }. */
-  function evaluate({ log, series, dates, bench, labels = {} }) {
+  function evaluate({ log, series, dates, bench, labels = {}, horizons = HORIZONS }) {
     const snaps = log && Array.isArray(log.snapshots) ? log.snapshots : [];
     const n = dates.length, index = new Map(dates.map((d, i) => [d, i]));
     const benchSeries = () => bench;
@@ -44,7 +45,7 @@
             const b = basketReturn(tickers, series, entry, n - 1), m = basketReturn(["__bench"], () => bench, entry, n - 1);
             if (b && m) row.sinceEntry = { basket: b.value, bench: m.value, days: n - 1 - entry };
           }
-          for (const h of HORIZONS) {
+          for (const h of horizons) {
             const exit = entry + h.days;
             if (exit > n - 1) { row.byH[h.days] = null; continue; }
             const b = basketReturn(tickers, series, entry, exit), m = basketReturn(["__bench"], () => bench, entry, exit);
@@ -55,7 +56,7 @@
       }
     }
     for (const L of Object.values(lists)) {
-      for (const h of HORIZONS) {
+      for (const h of horizons) {
         const done = L.rows.filter((r) => r.byH[h.days]);
         if (!done.length) { L.stats[h.days] = { n: 0 }; continue; }
         const ex = done.map((r) => r.byH[h.days].excess);
