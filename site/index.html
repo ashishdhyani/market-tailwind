@@ -131,6 +131,27 @@
         <p id="hold-msg" class="note" role="status"></p>
       </div>
     </details>
+    <details class="editor" id="plan-box">
+      <summary>Cash planner <small class="muted">(a calculator, not advice)</small></summary>
+      <div class="ed-body">
+        <p class="note"><b>You choose the stocks and weights; the planner only does the arithmetic</b> (whole shares, amounts, fees, cash left) and shows the app's signals for each pick. It does not tell you what to buy or sell. Prices are the latest close from the last data update, not live quotes.</p>
+        <div class="plan-grid">
+          <label>Cash to invest<input id="plan-cash" type="number" inputmode="decimal" min="0" step="any" placeholder="10000"></label>
+          <label>Currency<select id="plan-cur"><option>USD</option><option>SGD</option></select></label>
+          <label>Keep in cash (%)<input id="plan-reserve" type="number" inputmode="decimal" min="0" max="90" step="any" value="0"></label>
+          <label>Fee per order<input id="plan-fee" type="number" inputmode="decimal" min="0" step="any" value="0"></label>
+        </div>
+        <label class="chk"><input id="plan-frac" type="checkbox"> Allow part shares</label>
+        <label for="plan-basket"><b>Your basket:</b> one stock or ETF per line, with an optional weight %. Leave weights blank for an equal split.</label>
+        <textarea id="plan-basket" rows="6" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="NVDA 40&#10;MSFT 30&#10;XOM"></textarea>
+        <div class="ed-actions">
+          <button type="button" id="plan-go" class="btn">Calculate</button>
+          <button type="button" id="plan-clear" class="link danger">Clear</button>
+        </div>
+        <p id="plan-msg" class="note" role="status"></p>
+        <div id="plan-out"></div>
+      </div>
+    </details>
     <div id="hold-summary"></div>
     <div id="hold-changes"></div>
     <div class="table-wrap" id="hold-table-wrap" hidden><table id="hold-table"></table></div>

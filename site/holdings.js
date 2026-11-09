@@ -136,7 +136,77 @@
     return { last: cur, seen: storedSeen || null };
   }
 
-  const api = { parseHoldings, toCsv, summarize, rankBucket, snapshotEntry, diffSnapshots, rollSnapshots, MAX_HOLDINGS };
+  /* ---------- cash planner: arithmetic only ----------
+     The user picks the tickers (and optionally the weights); this turns "cash + basket" into whole shares and
+     dollar amounts. It never chooses what to buy. */
+
+  /* "NVDA 40", "MSFT, 30%", "XOM": ticker with an optional percentage weight. */
+  function parseBasket(text, known = new Set()) {
+    const out = new Map(), rejected = [];
+    for (const raw of String(text || "").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const toks = splitLine(line);
+      let t = (toks[0] || "").toUpperCase().replace(/^\$/, "");
+      if (!TICKER.test(t)) { rejected.push({ line, reason: "not a ticker symbol" }); continue; }
+      if (!known.has(t) && known.has(t + ".SI")) t += ".SI";
+      else if (!known.has(t) && known.has(t.replace(/[./]/g, "-"))) t = t.replace(/[./]/g, "-");
+      const w = toks[1] === undefined || toks[1] === "" ? null : num(String(toks[1]).replace(/%$/, ""));
+      if (toks[1] !== undefined && toks[1] !== "" && (w == null || w <= 0 || w > 100)) { rejected.push({ line, reason: "weight must be between 0 and 100" }); continue; }
+      out.set(t, { t, weight: w });
+    }
+    return { items: [...out.values()].slice(0, 30), rejected };
+  }
+
+  const cents = (x) => Math.round(x * 100) / 100;
+
+  /* cash: money to invest. reservePct: share to keep in cash. fee: cost per order. fractional: allow part shares.
+     items: [{t, price, weight|null}] (weights are percentages of the money invested; blanks split what is left).
+     Returns { rows, totals, warnings } or { error }. */
+  function planBasket({ cash, reservePct = 0, fee = 0, fractional = false, items }) {
+    if (!(cash > 0) || !Number.isFinite(cash)) return { error: "Enter an amount of cash above zero." };
+    if (!(reservePct >= 0 && reservePct <= 90)) return { error: "Cash to keep back must be between 0% and 90%." };
+    if (!(fee >= 0) || !Number.isFinite(fee)) return { error: "The fee per order cannot be negative." };
+    if (!items || !items.length) return { error: "Add at least one ticker to the basket." };
+    if (items.some((i) => !(i.price > 0))) return { error: "Every ticker needs a price." };
+
+    const given = items.filter((i) => i.weight != null), blank = items.length - given.length;
+    const sumGiven = given.reduce((a, i) => a + i.weight, 0);
+    let w;
+    if (blank === 0) w = items.map((i) => (i.weight / sumGiven) * 100);                 // relative weights, scaled to 100%
+    else if (given.length === 0) w = items.map(() => 100 / items.length);
+    else if (sumGiven >= 100 - 1e-9) return { error: `The weights you gave already use ${sumGiven.toFixed(0)}%. Give the others a weight too, or lower these.` };
+    else w = items.map((i) => (i.weight != null ? i.weight : (100 - sumGiven) / blank));
+
+    const reserveCash = cents((cash * reservePct) / 100), investable = cash - reserveCash;
+    const rows = items.map((i, k) => ({ t: i.t, price: i.price, weight: w[k], target: (investable * w[k]) / 100, shares: 0, cost: 0, note: "" }));
+    const buy = (r, shares) => { r.shares = shares; r.cost = cents(shares * r.price + (shares > 0 ? fee : 0)); };
+
+    for (const r of rows) {
+      const usable = r.target - fee;
+      const shares = usable > 0 ? (fractional ? Math.floor((usable / r.price) * 100) / 100 : Math.floor(usable / r.price)) : 0;
+      buy(r, shares);
+      if (shares === 0) r.note = fractional ? "This slot is too small to cover the fee." : `One share (${r.price.toFixed(2)}) costs more than this slot.`;
+    }
+    // Whole shares leave crumbs: spend them on the most under-filled slots, never touching the cash to keep back.
+    if (!fractional) {
+      for (;;) {
+        const room = cash - reserveCash - rows.reduce((a, r) => a + r.cost, 0);
+        const cand = rows.filter((r) => r.price + (r.shares === 0 ? fee : 0) <= room + 1e-9)
+          .sort((a, b) => (b.target - b.shares * b.price) - (a.target - a.shares * a.price))[0];
+        if (!cand || cand.target - cand.shares * cand.price <= 0) break;   // stop once every slot is at or over its target
+        buy(cand, cand.shares + 1); cand.note = "";
+      }
+    }
+    const invested = cents(rows.reduce((a, r) => a + r.cost, 0));
+    const fees = cents(rows.reduce((a, r) => a + (r.shares > 0 ? fee : 0), 0));
+    rows.forEach((r) => { r.pctOfCash = (r.cost / cash) * 100; r.target = cents(r.target); });
+    const warnings = [];
+    if (rows.some((r) => r.shares === 0)) warnings.push("Some slots could not buy a share at this amount.");
+    return { rows, totals: { cash, reserveCash, invested, fees, cashLeft: cents(cash - invested) }, warnings };
+  }
+
+  const api = { parseBasket, planBasket, parseHoldings, toCsv, summarize, rankBucket, snapshotEntry, diffSnapshots, rollSnapshots, MAX_HOLDINGS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Holdings = api;
 })(typeof self !== "undefined" ? self : this);

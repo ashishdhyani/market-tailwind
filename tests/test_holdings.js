@@ -72,4 +72,70 @@ st = H.rollSnapshots(st.last, st.seen, cur); ok(st.seen.asOf === "A" && st.last.
 const cur2 = { asOf: "C", items: cur.items };
 st = H.rollSnapshots(st.last, st.seen, cur2); ok(st.seen.asOf === "B", "next update rolls forward");
 
+// ================= cash planner (arithmetic only) =================
+const near = (a, b, m) => ok(Math.abs(a - b) < 0.005, m + " got " + a + " want " + b);
+const plan = (o) => H.planBasket(o);
+const at = (r, t) => pr.rows.find((x) => x.t === t);
+const ABC = [{ t: "A", price: 100, weight: null }, { t: "B", price: 250, weight: null }, { t: "C", price: 40, weight: null }];
+
+// parsing the basket: tickers with optional % weights, same ticker normalisation as holdings
+const pb = H.parseBasket("NVDA 40\nMSFT, 30%\nXOM\n# note\n<script>\nAAPL 150\nD05 20", new Set(["NVDA", "MSFT", "XOM", "AAPL", "D05.SI"]));
+eq(pb.items, [{ t: "NVDA", weight: 40 }, { t: "MSFT", weight: 30 }, { t: "XOM", weight: null }, { t: "D05.SI", weight: 20 }], "basket parse");
+ok(pb.rejected.length === 2, "basket rejects: " + JSON.stringify(pb.rejected));
+
+// equal split, whole shares; leftover crumbs go to the most under-filled slot
+let pr = plan({ cash: 10000, items: ABC });
+ok(at(pr, "A").shares === 34 && at(pr, "B").shares === 13 && at(pr, "C").shares === 83, "equal split shares " + pr.rows.map((x) => x.shares));
+near(pr.totals.invested, 9970, "invested"); near(pr.totals.cashLeft, 30, "cash left");
+near(pr.totals.invested + pr.totals.cashLeft, 10000, "money adds up");
+
+// cash to keep back is never spent
+pr = plan({ cash: 10000, reservePct: 10, items: ABC });
+near(pr.totals.invested, 9000, "reserve: invested"); near(pr.totals.cashLeft, 1000, "reserve: left"); near(pr.totals.reserveCash, 1000, "reserve amount");
+
+// fees per order reduce what each slot can buy
+pr = plan({ cash: 10000, fee: 5, items: ABC });
+ok(at(pr, "A").shares === 34 && at(pr, "B").shares === 13 && at(pr, "C").shares === 83, "fee shares " + pr.rows.map((x) => x.shares));
+near(pr.totals.fees, 15, "fees"); near(pr.totals.invested, 9985, "fee: invested"); near(pr.totals.cashLeft, 15, "fee: left");
+
+// explicit weights are percentages (scaled to 100 if they do not add up); blanks split the remainder
+pr = plan({ cash: 10000, items: [{ t: "A", price: 100, weight: 50 }, { t: "B", price: 250, weight: 30 }, { t: "C", price: 40, weight: 20 }] });
+ok(at(pr, "A").shares === 50 && at(pr, "B").shares === 12 && at(pr, "C").shares === 50, "weights 50/30/20");
+near(pr.totals.cashLeft, 0, "weights: nothing left");
+pr = plan({ cash: 10000, items: [{ t: "A", price: 100, weight: 20 }, { t: "B", price: 100, weight: 30 }] });  // 20:30 -> 40%:60%
+near(at(pr, "A").weight, 40, "scaled weight A"); near(at(pr, "B").weight, 60, "scaled weight B");
+pr = plan({ cash: 10000, items: [{ t: "A", price: 100, weight: 50 }, { t: "B", price: 100, weight: null }, { t: "C", price: 100, weight: null }] });
+near(at(pr, "B").weight, 25, "blank gets half the remainder"); near(at(pr, "C").weight, 25, "blank gets half the remainder");
+ok(plan({ cash: 10000, items: [{ t: "A", price: 100, weight: 70 }, { t: "B", price: 100, weight: 40 }, { t: "C", price: 100, weight: null }] }).error, "weights already above 100 with a blank");
+
+// part shares
+pr = plan({ cash: 1000, fractional: true, items: [{ t: "X", price: 300, weight: null }] });
+near(at(pr, "X").shares, 3.33, "fractional shares"); near(pr.totals.cashLeft, 1, "fractional left");
+
+// a slot too small for one share says so and keeps its money
+pr = plan({ cash: 1000, items: [{ t: "A", price: 100, weight: 90 }, { t: "Z", price: 500, weight: 10 }] });
+ok(at(pr, "Z").shares === 0 && /costs more than this slot/.test(at(pr, "Z").note) && pr.warnings.length === 1, "slot too small");
+near(at(pr, "A").shares, 9, "A shares"); near(pr.totals.cashLeft, 100, "kept cash");
+
+// bad input is refused with a message, never NaN
+for (const bad_ of [{ cash: 0 }, { cash: -5 }, { cash: NaN }, { cash: 100, reservePct: 95 }, { cash: 100, fee: -1 }, { cash: 100, items: [] }, { cash: 100, items: [{ t: "A", price: 0, weight: null }] }]) {
+  const e = plan({ items: ABC, ...bad_ });
+  ok(typeof e.error === "string" && !e.rows, "refused: " + JSON.stringify(bad_));
+}
+
+// randomised invariants: money adds up, the reserve is never touched, whole shares stay whole, nothing negative
+let seed = 12345; const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+for (let k = 0; k < 400; k++) {
+  const n = 1 + Math.floor(rnd() * 8), items = Array.from({ length: n }, (_, i) => ({ t: "T" + i, price: +(1 + rnd() * 900).toFixed(2), weight: rnd() < 0.5 ? null : +(1 + rnd() * 40).toFixed(1) }));
+  const sumGiven = items.reduce((a, i) => a + (i.weight || 0), 0); if (items.some((i) => i.weight == null) && sumGiven >= 99) continue;
+  const o = { cash: +(100 + rnd() * 100000).toFixed(2), reservePct: Math.floor(rnd() * 40), fee: rnd() < 0.5 ? 0 : +(rnd() * 10).toFixed(2), fractional: rnd() < 0.3, items };
+  const res = plan(o); if (res.error) { bad++; console.log("unexpected error", JSON.stringify(o), res.error); continue; }
+  const t = res.totals, spent = res.rows.reduce((a, x) => a + x.cost, 0);
+  if (Math.abs(t.invested + t.cashLeft - o.cash) > 0.011) { bad++; console.log("money does not add up", JSON.stringify(o)); }
+  if (t.cashLeft < t.reserveCash - 0.011) { bad++; console.log("reserve touched", JSON.stringify(o), t); }
+  if (Math.abs(spent - t.invested) > 0.05 * n) { bad++; console.log("rows do not sum", t.invested, spent); }
+  if (res.rows.some((x) => x.shares < 0 || x.cost < 0 || (!o.fractional && !Number.isInteger(x.shares)))) { bad++; console.log("bad shares", JSON.stringify(o)); }
+  const wsum = res.rows.reduce((a, x) => a + x.weight, 0); if (Math.abs(wsum - 100) > 1e-6) { bad++; console.log("weights do not sum to 100", wsum); }
+}
+
 console.log(bad ? `FAILED ${bad}` : "holdings.js ALL OK"); process.exit(bad ? 1 : 0);

@@ -38,6 +38,7 @@
     buildHorizons();
     bindControls();
     bindHoldings();
+    bindPlan();
     $("status").hidden = true;
     $("app").hidden = false;
     render();
@@ -532,6 +533,73 @@
       render();
     };
     $("hold-text").value = holdings.length ? Hd.toCsv(holdings) : "";
+  }
+
+  /* ---------- cash planner: you pick the basket, this does the arithmetic ---------- */
+
+  const PLAN_KEY = "mt_plan";
+  const $v = (id) => $(id).value;
+  function savePlan() {
+    lsSet(PLAN_KEY, { cash: $v("plan-cash"), cur: $v("plan-cur"), reserve: $v("plan-reserve"), fee: $v("plan-fee"), frac: $("plan-frac").checked, basket: $v("plan-basket") });
+  }
+  function restorePlan() {
+    const p = lsGet(PLAN_KEY);
+    if (!p) return;
+    $("plan-cash").value = p.cash ?? ""; $("plan-cur").value = p.cur === "SGD" ? "SGD" : "USD"; $("plan-reserve").value = p.reserve ?? 0;
+    $("plan-fee").value = p.fee ?? 0; $("plan-frac").checked = !!p.frac; $("plan-basket").value = typeof p.basket === "string" ? p.basket.slice(0, 5000) : "";
+  }
+
+  function calcPlan() {
+    const out = $("plan-out"), msg = $("plan-msg");
+    out.innerHTML = ""; msg.textContent = ""; msg.style.color = "";
+    savePlan();
+    const cur = $v("plan-cur"), cash = parseFloat($v("plan-cash"));
+    const pb = Hd.parseBasket($v("plan-basket"), knownTickers());
+    const items = [], notes = pb.rejected.map((x) => `Skipped "${x.line.slice(0, 24)}": ${x.reason}`);
+    for (const it of pb.items) {
+      const sig = signalFor({ t: it.t });
+      if (!sig.covered) { notes.push(`${it.t}: no price data in this app, so it was left out.`); continue; }
+      if (sig.currency !== cur) { notes.push(`${it.t} trades in ${sig.currency}, not ${cur}. There is no currency conversion, so it was left out.`); continue; }
+      items.push({ t: it.t, price: sig.row.price, weight: it.weight, sig });
+    }
+    const res = Hd.planBasket({ cash, reservePct: parseFloat($v("plan-reserve")) || 0, fee: parseFloat($v("plan-fee")) || 0, fractional: $("plan-frac").checked, items });
+    if (res.error) { msg.textContent = res.error + (notes.length ? " " + notes.join(" ") : ""); msg.style.color = "var(--neg)"; return; }
+
+    const by = new Map(items.map((i) => [i.t, i.sig]));
+    const fmtShares = (v) => (Number.isInteger(v) ? v.toLocaleString("en-US") : v.toFixed(2));
+    const rows = res.rows.map((r) => {
+      const g = by.get(r.t), l = F.lossInfo(g.info);
+      const signals = [g.row.trend_label, g.rank ? `#${g.rank.n}/${g.rank.of}` : null, g.newsWord ? `news ${g.newsWord}` : null, g.fund ? `fundamentals ${g.fund.toLowerCase()}` : null]
+        .filter(Boolean).map(esc).join(" · ") + (l ? ` <span class="flag" title="${esc(l.text)}">⚠ ${esc(l.short)}</span>` : "");
+      return `<tr><td><b>${esc(r.t)}</b>${etfTag(r.t)}${nameTag(r.t)}</td><td>${cur === "SGD" ? "S$" : "$"}${r.price.toFixed(2)}</td><td>${r.weight.toFixed(1)}%</td>`
+        + `<td>${fmtShares(r.shares)}</td><td>${esc(money(r.shares * r.price, cur))}</td><td>${r.pctOfCash.toFixed(1)}%</td><td class="sig">${signals}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}</td></tr>`;
+    }).join("");
+    const T = res.totals;
+    const summ = Hd.summarize(res.rows.map((r) => ({ t: r.t, value: r.shares * r.price, currency: cur, group: by.get(r.t).group })))[0];
+    const bars = summ ? summ.groups.map((g) => `<div class="bar-row"><span class="bar-label" title="${esc(g.name)}">${esc(g.name)}</span><span class="bar"><i style="width:${(g.weight * 100).toFixed(1)}%"></i></span><span class="bar-val">${(g.weight * 100).toFixed(0)}%</span></div>`).join("") : "";
+    const losers = res.rows.filter((r) => F.isLossMaking(by.get(r.t).info)).map((r) => r.t);
+    const facts = [
+      summ ? `Largest position: <b>${esc(summ.top.t)}</b> at ${(summ.top.weight * 100).toFixed(0)}% of what you invest.` : "",
+      losers.length ? `Reports a loss: <b>${losers.map(esc).join(", ")}</b> (see the ⚠ marks).` : "",
+      ...res.warnings.map(esc), ...notes.map(esc),
+    ].filter(Boolean).map((x) => `<li>${x}</li>`).join("");
+    out.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Stock</th><th>Price</th><th>Weight</th><th>Shares</th><th>Amount</th><th>% of cash</th><th>The app's signals</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      + `<p class="plan-total"><b>Invested ${esc(money(T.invested, cur))}</b> of ${esc(money(T.cash, cur))}`
+      + `${T.fees ? ` (fees ${esc(money(T.fees, cur))})` : ""} · <b>cash left ${esc(money(T.cashLeft, cur))}</b>${T.reserveCash ? ` (including ${esc(money(T.reserveCash, cur))} kept back)` : ""}</p>`
+      + (bars ? `<h3 class="plan-h">Split by sector</h3>${bars}` : "") + (facts ? `<ul class="plan-facts">${facts}</ul>` : "")
+      + `<p class="note">A calculation from the numbers you entered, not a recommendation. Real orders fill at live prices, which differ from the last close.</p>`;
+  }
+
+  function bindPlan() {
+    restorePlan();
+    $("plan-go").onclick = calcPlan;
+    for (const id of ["plan-cash", "plan-cur", "plan-reserve", "plan-fee", "plan-frac", "plan-basket"]) $(id).addEventListener("change", savePlan);
+    $("plan-clear").onclick = () => {
+      lsDel(PLAN_KEY);
+      for (const id of ["plan-cash", "plan-basket"]) $(id).value = "";
+      $("plan-reserve").value = 0; $("plan-fee").value = 0; $("plan-frac").checked = false; $("plan-cur").value = "USD";
+      $("plan-out").innerHTML = ""; $("plan-msg").textContent = "Cleared.";
+    };
   }
 
   function renderHoldings() {

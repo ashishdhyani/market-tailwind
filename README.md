@@ -42,6 +42,10 @@ streamlit run app.py      # open the dashboard
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
+## Cash planner (a calculator, not advice)
+
+In the Holdings tab, enter an amount of cash, the stocks or ETFs **you** are considering and optional weights; the planner works out whole shares, dollar amounts, fees and cash left (and can keep a % back as cash), and shows the app's signals next to each pick plus a sector split. It never chooses what to buy. Each basket must be in one currency (no FX conversion). Inputs stay in your browser only. The arithmetic is tested, including 400 randomised cases (`tests/test_holdings.js`).
+
 ## ETFs and quantum stocks
 
 Besides the S&P 500 and 15 Singapore stocks, the ranking covers hand-picked groups listed in `settings.py` (`EXTRA_GROUPS`): **quantum computing** (IonQ, Rigetti, D-Wave, Quantum Computing Inc, Arqit, SEALSQ, Infleqtion, plus the QTUM ETF) and ETFs in five groups (AI & tech incl. AGIX and AIPO, themes, index/income/international, commodity/crypto/bond, and the 11 sector ETFs). They are ranked with the same price-only score. Funds have no company financials, so the fundamentals checks and loss warnings do not apply to them. Each group has its own button in Controls. These lists are chosen with hindsight, so a backtest that includes them is flattered (the Backtest tab says so). To add a ticker, put it in `EXTRA_GROUPS` and run the refresh. Note: QMCO is Quantum Corporation (data storage), not quantum computing, so it is deliberately not included.

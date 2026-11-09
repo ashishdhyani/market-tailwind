@@ -253,3 +253,12 @@ tr.extra, tr.detail-row.extra { display: none; }
   .seg button:nth-child(3n + 1) { border-left: 0; }
   .seg button:nth-child(n + 4) { border-top: 1px solid var(--line); }
 }
+
+/* ---- cash planner ---- */
+.plan-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; margin: 6px 0 8px; }
+.plan-grid label { font-size: .82rem; font-weight: 600; color: var(--muted); }
+.plan-grid input, .plan-grid select { display: block; width: 100%; margin-top: 3px; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+#plan-out table td.sig { white-space: normal; min-width: 170px; font-size: .8rem; text-align: left; }
+.plan-total { margin: 10px 0 4px; font-size: .92rem; }
+.plan-h { font-size: .88rem; margin: 10px 0 4px; }
+.plan-facts { margin: 8px 0; padding-left: 18px; font-size: .86rem; }
