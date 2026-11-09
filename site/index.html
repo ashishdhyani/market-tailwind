@@ -46,7 +46,7 @@
         <input id="cost" type="range" min="0" max="50" value="10">
       </label>
       <div class="uni-head">
-        <span>Universe (<b id="uni-count"></b>)</span>
+        <span>Universe: <b id="uni-count"></b></span>
         <span><button type="button" id="uni-all" class="link">All</button> · <button type="button" id="uni-none" class="link">None</button></span>
       </div>
       <div id="chips" class="chips"></div>
@@ -69,7 +69,7 @@
         <li><b>Not advice.</b> Nothing here is a recommendation to buy, sell or hold any security. It is not personalised and knows nothing about your goals, finances, risk tolerance or taxes. Consider speaking to a licensed financial adviser.</li>
         <li><b>Simple, fallible rules.</b> Ideas come from price momentum, trend, volatility and a word count over news headlines. These rules can be wrong, and headline tone can be misread. Fundamentals shown are rules of thumb, not verdicts.</li>
         <li><b>Imperfect data.</b> Prices, news and company numbers come from Yahoo Finance's free feeds. They can be delayed, incomplete or wrong, and they are refreshed only a couple of times a day.</li>
-        <li><b>Backtests mislead.</b> Past results are flattered by survivorship bias (the watchlist is today's winners), simplified costs and luck. Past performance does not predict future returns.</li>
+        <li><b>Backtests mislead.</b> Past results are flattered by survivorship bias (the stock list is today's index members; companies that fell out are missing), simplified costs and luck. Past performance does not predict future returns.</li>
         <li><b>Investing carries risk,</b> including losing everything you put in. Short-term ideas (1 week to 1 month) are especially noisy.</li>
         <li><b>Verify before you act.</b> Check company filings, official sources and several independent opinions. Use this app only as a starting point for your own research.</li>
         <li><b>No warranty.</b> The app is provided as is, with no guarantee of accuracy, and its authors accept no liability for decisions made using it.</li>
@@ -92,6 +92,7 @@
     <p class="note" style="margin-top:0">Tap a stock to see why it is recommended and the key numbers behind it.</p>
     <ol id="picks" class="picks"></ol>
     <div class="table-wrap"><table id="rank-table"></table></div>
+    <button type="button" id="rank-more" class="link" hidden></button>
     <p class="note">Prices are in each stock's local currency (USD / SGD). The score only ranks stocks against each other; it does not say any of them is a good buy. Tap a row in the table to expand it.</p>
   </section>
 
@@ -152,7 +153,7 @@
     <details class="caveats">
       <summary>Read before trusting these numbers</summary>
       <ul>
-        <li><b>Survivorship bias:</b> the watchlist is today's large, successful companies, so past results look better than a real investor could have achieved.</li>
+        <li><b>Survivorship bias:</b> the stock list is today's S&amp;P 500 members (plus 15 Singapore stocks), so companies that were dropped or failed are missing and past results look better than a real investor could have achieved. History also only goes back to 2020.</li>
         <li><b>Costs are simplified:</b> flat basis points per side, no taxes, no slippage.</li>
         <li><b>Mixed currencies:</b> US and SG stocks are ranked on local-currency returns.</li>
         <li><b>Few years, few stocks:</b> differences of a few percent are noise.</li>
@@ -165,7 +166,7 @@
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
     <p><b>Important:</b> Market Tailwind is a research tool, not financial advice. The rankings, sector views and suggested stocks and ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and don't rely on them. See "Read the full disclaimer" at the top of the page.</p>
     <p><b>Holdings:</b> the Holdings tab shows how the app's signals look for stocks you own (trend, news tone, ranking, fundamentals check, price moves) and lists what changed since the previous data update. Your holdings are kept only in this browser's storage. It is a monitor, not a source of buy or sell instructions.</p>
-    <p><b>Sectors and News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and six large stocks in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks and the sector ETF are the suggestions. The News tab lists the headlines behind each sector, ranked by impact: a headline's impact is its share of the sector's total tone signal (newer and stronger-toned headlines count more). Market-wide headlines at the top of the News tab are for context only and are not part of any score.</p>
+    <p><b>Sectors and News:</b> the 11 US sectors are ranked by 70% price momentum (their SPDR sector ETF, using the horizon you picked) and 30% news tone (recency-weighted tone of the last 7 days of headlines for the ETF and every S&amp;P 500 stock in that sector, compared across sectors). Stocks inside a sector use 75% price and 25% news. The top three stocks in each sector (out of all its S&amp;P 500 members) and the sector ETF are the suggestions. The News tab lists the headlines behind each sector, ranked by impact: a headline's impact is its share of the sector's total tone signal (newer and stronger-toned headlines count more). Market-wide headlines at the top of the News tab are for context only and are not part of any score.</p>
     <p><b>Horizons:</b> <i>Long-term</i> is the model above. <i>1 month</i>, <i>2 weeks</i> and <i>1 week</i> replace both momentum terms (55% together) with the return over just that recent window; trend, volatility and closeness to the 1-year high stay the same. Short windows chase what moved most recently, which is noisy and often partly reverses, so treat them as watch-list ideas and compare them on the Backtest tab.</p>
     <p><b>Backtest:</b> rebalanced on the last trading day of each month (Long-term, 1 month), every second week (2 weeks) or every week (1 week), matching the horizon you picked. The trade fills one trading day later, so the signal never sees prices it could not have acted on. Shorter horizons trade more often, so trading costs matter much more.</p>
     <p><b>Next steps:</b> add fundamentals (SEC EDGAR), news sentiment (Finnhub free tier + FinBERT) and macro data (FRED) as extra features, then re-run the backtest to see if they help.</p>

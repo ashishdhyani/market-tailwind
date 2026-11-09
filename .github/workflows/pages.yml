@@ -21,6 +21,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -33,34 +34,25 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-refresh.txt
 
-      - name: Refresh prices from Yahoo Finance
-        # Yahoo sometimes rate-limits CI machines. export_web.py refuses to write a partial
-        # file, so on failure we keep (and deploy) the last committed data.json.
+      - name: Refresh the S&P 500 list, prices, news and company numbers
+        # Yahoo sometimes rate-limits CI machines. Each script refuses to write a poor file, so a failed
+        # part keeps (and publishes) the last committed one. News is a different Yahoo service, so it
+        # runs alongside the price download. Company numbers change slowly: at most once a day.
         continue-on-error: true
         run: |
           pip install -r requirements-refresh.txt
-          python export_web.py --refresh
-
-      - name: Refresh news headlines
-        # Independent of prices: if Yahoo's feeds fail, news.py exits without touching news.json.
-        continue-on-error: true
-        run: |
-          pip install -r requirements-refresh.txt
-          python news.py
-
-      - name: Refresh company fundamentals
-        # Names, P/E, margins, etc. Same rule: a failed run leaves the last good file in place.
-        continue-on-error: true
-        run: |
-          pip install -r requirements-refresh.txt
-          python fundamentals.py
+          python universe.py || echo "::warning::could not refresh the S&P 500 list; keeping sp500.csv"
+          python news.py & news_pid=$!
+          python export_web.py --refresh || echo "::warning::price refresh failed; keeping the last data.json"
+          python fundamentals.py --max-age-hours 20 || echo "::warning::fundamentals refresh failed; keeping the last file"
+          wait $news_pid || echo "::warning::news refresh failed; keeping the last news.json"
 
       - name: Commit refreshed data
         run: |
-          if [ -n "$(git status --porcelain site)" ]; then
+          if [ -n "$(git status --porcelain site sp500.csv)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add site/data.json site/sector_data.json site/news.json site/fundamentals.json
+            git add site/data.json site/news.json site/fundamentals.json sp500.csv
             git commit -m "Refresh price and news data"
             git push
           fi

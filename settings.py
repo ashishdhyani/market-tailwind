@@ -1,16 +1,18 @@
 """Project settings: where data lives and which stocks to analyze."""
+import csv
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 DB_PATH = ROOT / "data" / "market.db"
 START_DATE = "2012-01-01"
 
-# Edit freely. Yahoo Finance symbols: US = plain ticker, Singapore = ".SI" suffix.
-US = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "AVGO", "JPM", "V", "MA",
-    "LLY", "UNH", "XOM", "CVX", "PG", "KO", "PEP", "COST", "WMT", "HD",
-    "JNJ", "MRK", "ABBV", "CSCO", "ORCL", "ADBE", "NFLX", "CRM", "TXN", "CAT",
-]
+# --- US: the full S&P 500, read from sp500.csv (refreshed by universe.py). Yahoo symbols: BRK.B -> BRK-B.
+SP500_FILE = ROOT / "sp500.csv"
+with SP500_FILE.open(newline="") as _f:
+    SP500 = [{"symbol": r["symbol"], "name": r["name"], "sector": r["sector"]} for r in csv.DictReader(_f)]
+US = [r["symbol"] for r in SP500]
+
+# --- Singapore: a hand-picked set of large SGX stocks (".SI" suffix). Edit freely.
 SG = [
     "D05.SI", "O39.SI", "U11.SI",  # DBS, OCBC, UOB
     "Z74.SI", "C6L.SI", "S63.SI",  # Singtel, SIA, ST Engineering
@@ -22,20 +24,15 @@ WATCHLIST = US + SG
 # Used only for comparison in the backtest, never ranked or picked.
 BENCHMARKS = {"SPY": "S&P 500 ETF", "ES3.SI": "STI ETF (Singapore)"}
 
-# US sectors for the "Sectors & News" view: one SPDR sector ETF plus large US stocks each.
-# US-listed only. Edit freely; the daily job picks up changes.
+# --- US sectors for the Sectors view: each sector's SPDR ETF plus every S&P 500 member in it.
+SECTOR_ETFS = {
+    "Technology": "XLK", "Communication Services": "XLC", "Consumer Discretionary": "XLY", "Consumer Staples": "XLP",
+    "Energy": "XLE", "Financials": "XLF", "Health Care": "XLV", "Industrials": "XLI", "Materials": "XLB",
+    "Real Estate": "XLRE", "Utilities": "XLU",
+}
 SECTORS = {
-    "Technology":             {"etf": "XLK",  "stocks": ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "CRM"]},
-    "Communication Services": {"etf": "XLC",  "stocks": ["GOOGL", "META", "NFLX", "DIS", "TMUS", "VZ"]},
-    "Consumer Discretionary": {"etf": "XLY",  "stocks": ["AMZN", "TSLA", "HD", "MCD", "NKE", "LOW"]},
-    "Consumer Staples":       {"etf": "XLP",  "stocks": ["PG", "KO", "PEP", "COST", "WMT", "PM"]},
-    "Energy":                 {"etf": "XLE",  "stocks": ["XOM", "CVX", "COP", "EOG", "SLB", "OXY"]},
-    "Financials":             {"etf": "XLF",  "stocks": ["JPM", "BAC", "WFC", "GS", "V", "MA"]},
-    "Health Care":            {"etf": "XLV",  "stocks": ["LLY", "UNH", "JNJ", "MRK", "ABBV", "TMO"]},
-    "Industrials":            {"etf": "XLI",  "stocks": ["CAT", "GE", "RTX", "HON", "UNP", "DE"]},
-    "Materials":              {"etf": "XLB",  "stocks": ["LIN", "SHW", "FCX", "APD", "ECL", "NEM"]},
-    "Real Estate":            {"etf": "XLRE", "stocks": ["PLD", "AMT", "EQIX", "WELL", "SPG", "O"]},
-    "Utilities":              {"etf": "XLU",  "stocks": ["NEE", "SO", "DUK", "CEG", "AEP", "SRE"]},
+    name: {"etf": etf, "stocks": [r["symbol"] for r in SP500 if r["sector"] == name]}
+    for name, etf in SECTOR_ETFS.items()
 }
 SECTOR_TICKERS = sorted({t for s in SECTORS.values() for t in [s["etf"], *s["stocks"]]})
 

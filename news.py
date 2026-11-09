@@ -24,13 +24,17 @@ from pathlib import Path
 import certifi
 
 import sentiment
-from settings import MARKET_FEEDS, SECTOR_TICKERS
+from concurrent.futures import ThreadPoolExecutor
+
+from settings import MARKET_FEEDS, SECTOR_ETFS, SECTOR_TICKERS
 
 OUT = Path(__file__).parent / "site" / "news.json"
 FEED = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={}&region=US&lang=en-US"
 KEEP_DAYS = 10
-PER_TICKER = 15
-SUMMARY_CHARS = 280
+PER_STOCK = 5      # ~500 stocks: a few headlines each keeps news.json small
+PER_ETF = 15       # sector ETFs and market feeds carry the sector-level picture
+SUMMARY_CHARS = 220
+WORKERS = 4
 MIN_FEEDS_OK = 0.8  # fraction of tickers that must load
 # Some Python builds (e.g. python.org on macOS) ship without a CA bundle; certifi always has one.
 CONTEXT = ssl.create_default_context(cafile=certifi.where())
@@ -63,17 +67,28 @@ def fetch_feed(ticker: str, timeout: float = 20):
         yield {"title": title, "url": link, "time": when, "summary": (item.findtext("description") or "").strip()}
 
 
-def collect(tickers, market=(), pause: float = 0.3):
+def collect(tickers, market=(), pause: float = 0.1):
     """Merge feeds into one list of articles; an article seen under several tickers is stored once.
     Items from `market` feeds (index feeds) are flagged so the app can show a "US market" view."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)
     articles, ok, failed = {}, 0, []
-    for t in [*tickers, *market]:
-        is_market = t in market
+    etfs = set(SECTOR_ETFS.values())
+    names = [*tickers, *market]
+
+    def load(t):
+        time.sleep(pause)
+        limit = PER_ETF if (t in etfs or t in market) else PER_STOCK
         try:
-            items = sorted(fetch_feed(t), key=lambda a: a["time"], reverse=True)[:PER_TICKER]
+            return t, sorted(fetch_feed(t), key=lambda a: a["time"], reverse=True)[:limit], None
         except (urllib.error.URLError, ET.ParseError, TimeoutError, OSError) as exc:
-            failed.append(f"{t} ({type(exc).__name__})")
+            return t, None, f"{t} ({type(exc).__name__})"
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        results = list(pool.map(load, names))
+    for t, items, err in results:
+        is_market = t in market
+        if err:
+            failed.append(err)
             continue
         ok += 0 if is_market else 1
         for a in items:
@@ -84,7 +99,6 @@ def collect(tickers, market=(), pause: float = 0.3):
                 art["market"] = True
             elif t not in art["tickers"]:
                 art["tickers"].append(t)
-        time.sleep(pause)
     return articles, ok, failed
 
 

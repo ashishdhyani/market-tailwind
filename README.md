@@ -1,7 +1,7 @@
 # Market Tailwind
 
-Finds the US sectors with momentum and good news behind them (and suggests stocks and ETFs in them), ranks a
-watchlist of US and Singapore stocks by momentum, trend and risk, and backtests the ranking. Uses only free data (Yahoo Finance via `yfinance`).
+Finds the US sectors with momentum and good news behind them (and suggests stocks and ETFs in them), ranks the full
+S&P 500 plus 15 Singapore stocks by momentum, trend and risk, and backtests the ranking. Uses only free data (Yahoo Finance via `yfinance`).
 
 ## Web version (GitHub Pages, works on iPhone)
 
@@ -31,7 +31,8 @@ streamlit run app.py      # open the dashboard
 
 | File | Purpose |
 |------|---------|
-| `settings.py` | Watchlist, benchmarks, start date. Edit the tickers here. |
+| `settings.py` | Universe: the full S&P 500 (from `sp500.csv`) plus 15 Singapore stocks, benchmarks, sector ETFs. Edit the Singapore list here. |
+| `universe.py` | Refreshes `sp500.csv` (current S&P 500 members and sectors) from a public dataset. |
 | `data.py` | Download prices and store/load them with SQLite. |
 | `scoring.py` | Features and composite score, plus the "why" text for each pick. |
 | `backtest.py` | Monthly rebalance, next-day fills, costs, benchmark comparison. |

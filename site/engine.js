@@ -54,13 +54,51 @@
     return Math.sqrt(s / (w - 1));
   };
 
+  /* Single-pass versions of the rolling windows above (O(n) instead of O(n*w)), used for the ~500-stock
+     universe. Same rule: a window only has a value when every entry in it is valid. */
+  function rollMeanFast(a, w) {
+    const n = a.length, o = nan(n);
+    let sum = 0, bad = 0;
+    for (let i = 0; i < n; i++) {
+      const v = a[i];
+      if (v !== v) bad++; else sum += v;
+      if (i >= w) { const u = a[i - w]; if (u !== u) bad--; else sum -= u; }
+      if (i >= w - 1 && bad === 0) o[i] = sum / w;
+    }
+    return o;
+  }
+  function rollMaxFast(a, w) {  // monotonic queue
+    const n = a.length, o = nan(n), dq = new Int32Array(n);
+    let head = 0, tail = 0, bad = 0;
+    for (let i = 0; i < n; i++) {
+      const v = a[i];
+      if (v !== v) bad++;
+      else { while (tail > head && a[dq[tail - 1]] <= v) tail--; dq[tail++] = i; }
+      if (i >= w && a[i - w] !== a[i - w]) bad--;
+      while (tail > head && dq[head] <= i - w) head++;
+      if (i >= w - 1 && bad === 0) o[i] = a[dq[head]];
+    }
+    return o;
+  }
+  function rollStdFast(a, w) {  // sample std (ddof = 1) from running sums
+    const n = a.length, o = nan(n);
+    let sum = 0, sumsq = 0, bad = 0;
+    for (let i = 0; i < n; i++) {
+      const v = a[i];
+      if (v !== v) bad++; else { sum += v; sumsq += v * v; }
+      if (i >= w) { const u = a[i - w]; if (u !== u) bad--; else { sum -= u; sumsq -= u * u; } }
+      if (i >= w - 1 && bad === 0) o[i] = Math.sqrt(Math.max(0, (sumsq - (sum * sum) / w) / (w - 1)));
+    }
+    return o;
+  }
+
   /* Features for one price series, each value at t using only data up to t. */
   function featuresFor(p) {
     const n = p.length;
     const s21 = shift(p, 21), s126 = shift(p, 126), s252 = shift(p, 252);
-    const sma50 = rolling(p, 50, mean), sma200 = rolling(p, 200, mean);
-    const hi = rolling(p, 252, max);
-    const vol = rolling(pctChange(p), 63, std);
+    const sma50 = rollMeanFast(p, 50), sma200 = rollMeanFast(p, 200);
+    const hi = rollMaxFast(p, 252);
+    const vol = rollStdFast(pctChange(p), 63);
     const s5 = shift(p, 5), s10 = shift(p, 10);
     const f = { mom_12_1: nan(n), mom_6_1: nan(n), trend: nan(n), vol_63d: nan(n), drawdown_1y: nan(n),
       ret_5: nan(n), ret_10: nan(n), ret_21: nan(n) };
@@ -81,47 +119,50 @@
 
   /* Cross-sectional z-score per date over the given columns, clipped to +-3.
      A lone valid value (or an all-equal day) is neutral 0, not missing. */
-  function zScore(cols, n) {
-    const z = cols.map(() => nan(n));
-    for (let i = 0; i < n; i++) {
+  function zScore(cols, n, idx) {
+    const m = cols.length, z = cols.map(() => nan(n));
+    const day = (i) => {
       let cnt = 0, sum = 0;
-      for (const c of cols) if (!Number.isNaN(c[i])) { cnt++; sum += c[i]; }
-      if (cnt === 0) continue;
-      const m = sum / cnt;
+      for (let j = 0; j < m; j++) { const v = cols[j][i]; if (v === v) { cnt++; sum += v; } }
+      if (cnt === 0) return;
+      const mu = sum / cnt;
       let ss = 0;
-      for (const c of cols) if (!Number.isNaN(c[i])) ss += (c[i] - m) * (c[i] - m);
+      for (let j = 0; j < m; j++) { const v = cols[j][i]; if (v === v) ss += (v - mu) * (v - mu); }
       const sd = cnt > 1 ? Math.sqrt(ss / (cnt - 1)) : NaN;
-      cols.forEach((c, j) => {
-        if (Number.isNaN(c[i])) return;
-        const v = sd > 0 ? (c[i] - m) / sd : 0;
-        z[j][i] = Math.max(-3, Math.min(3, v));
-      });
-    }
+      for (let j = 0; j < m; j++) {
+        const v = cols[j][i];
+        if (v !== v) continue;
+        const q = sd > 0 ? (v - mu) / sd : 0;
+        z[j][i] = q > 3 ? 3 : q < -3 ? -3 : q;
+      }
+    };
+    if (idx) for (const i of idx) day(i); else for (let i = 0; i < n; i++) day(i);
     return z;
   }
 
   /* feats: array (one per ticker) of featuresFor() results. Returns one score series per ticker.
      A score is missing if any component is missing (NaN propagates, like the pandas sum). */
-  function scores(feats, n, horizon = "long") {
+  function scores(feats, n, horizon = "long", idx = null) {
     const days = HORIZONS[horizon].days;
     const retKey = { 5: "ret_5", 10: "ret_10", 21: "ret_21" }[days];
     const zs = {
-      mom_12_1: zScore(feats.map((f) => f.mom_12_1), n),
-      mom_6_1: zScore(feats.map((f) => f.mom_6_1), n),
-      ret: retKey ? zScore(feats.map((f) => f[retKey]), n) : null,
-      trend: zScore(feats.map((f) => f.trend), n),
-      low_vol: zScore(feats.map((f) => f.vol_63d), n),
-      near_high: zScore(feats.map((f) => f.drawdown_1y), n),
+      mom_12_1: retKey ? null : zScore(feats.map((f) => f.mom_12_1), n, idx),
+      mom_6_1: retKey ? null : zScore(feats.map((f) => f.mom_6_1), n, idx),
+      ret: retKey ? zScore(feats.map((f) => f[retKey]), n, idx) : null,
+      trend: zScore(feats.map((f) => f.trend), n, idx),
+      low_vol: zScore(feats.map((f) => f.vol_63d), n, idx),
+      near_high: zScore(feats.map((f) => f.drawdown_1y), n, idx),
     };
     return feats.map((_, j) => {
       const s = nan(n);
-      for (let i = 0; i < n; i++) {
+      const each = (i) => {
         const mom = zs.ret ? RET_WEIGHT * zs.ret[j][i]
           : WEIGHTS.mom_12_1 * zs.mom_12_1[j][i] + WEIGHTS.mom_6_1 * zs.mom_6_1[j][i];
         s[i] = mom
           + WEIGHTS.trend * zs.trend[j][i] - WEIGHTS.low_vol * zs.low_vol[j][i]
           + WEIGHTS.near_high * zs.near_high[j][i];
-      }
+      };
+      if (idx) for (const i of idx) each(i); else for (let i = 0; i < n; i++) each(i);
       return s;
     });
   }
@@ -129,11 +170,22 @@
   const TREND_LABEL = { 2: "Strong uptrend", 1: "Mixed trend", 0: "Downtrend" };
 
   /* Ranked snapshot on the most recent date with any score. */
+  /* Last date on which at least one stock has every input of the score (the score is missing if any is). */
+  function latestIndex(feats, n, horizon) {
+    const retKey = { 5: "ret_5", 10: "ret_10", 21: "ret_21" }[HORIZONS[horizon].days];
+    for (let i = n - 1; i >= 0; i--) {
+      for (const f of feats) {
+        if (f.trend[i] === f.trend[i] && f.vol_63d[i] === f.vol_63d[i] && f.drawdown_1y[i] === f.drawdown_1y[i]
+          && (retKey ? f[retKey][i] === f[retKey][i] : f.mom_12_1[i] === f.mom_12_1[i] && f.mom_6_1[i] === f.mom_6_1[i])) return i;
+      }
+    }
+    return -1;
+  }
+
   function latestTable(tickers, prices, feats, n, horizon = "long") {
-    const sc = scores(feats, n, horizon);
-    let d = -1;
-    for (let i = n - 1; i >= 0 && d < 0; i--) if (sc.some((s) => !Number.isNaN(s[i]))) d = i;
+    const d = latestIndex(feats, n, horizon);
     if (d < 0) throw new Error("Not enough price history yet (need about 1 year per stock).");
+    const sc = scores(feats, n, horizon, [d]);
     const rows = [];
     tickers.forEach((t, j) => {
       if (Number.isNaN(sc[j][d])) return;
@@ -228,10 +280,11 @@
   function runBacktest(dates, prices, feats, bench, topN, costBps, lag = 1, horizon = "long") {
     const n = dates.length, m = prices.length;
     const rets = prices.map((p) => pctChange(p).map((x) => (Number.isNaN(x) ? 0 : x)));
-    const sc = scores(feats, n, horizon);
+    const reb = rebalanceIdx(dates, HORIZONS[horizon].rebalance);
+    const sc = scores(feats, n, horizon, reb);
 
     const tgtTop = new Array(n).fill(null), tgtAll = new Array(n).fill(null);
-    for (const d of rebalanceIdx(dates, HORIZONS[horizon].rebalance)) {
+    for (const d of reb) {
       const valid = [];
       for (let j = 0; j < m; j++) if (!Number.isNaN(sc[j][d])) valid.push(j);
       if (valid.length < Math.max(topN, 2)) continue;
@@ -377,7 +430,20 @@
     return { sectors, hasNews, newsGenerated: news ? news.generated : null, asOf: sd.dates[sd.dates.length - 1] };
   }
 
-  const api = { TREND_LABEL, sectorAnalysis, newsStats, rankedHeadlines, NEWS_DAYS, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
+  /* The Sectors view works on the last ~year of the same price file. data: parsed data.json; series(t) gives a
+     ticker's Float64Array of prices (full length). Sector ETFs and members come from data.groups. */
+  function deriveSectorData(data, series, days = 320) {
+    const n = data.dates.length, from = Math.max(0, n - days);
+    const sectors = {}, prices = {};
+    for (const g of data.groups) {
+      if (!g.etf) continue;
+      sectors[g.name] = { etf: g.etf, stocks: g.tickers.filter((t) => series(t)) };
+      for (const t of [g.etf, ...sectors[g.name].stocks]) if (!prices[t]) prices[t] = series(t).subarray(from);
+    }
+    return { dates: data.dates.slice(from), sectors, prices };
+  }
+
+  const api = { deriveSectorData, TREND_LABEL, sectorAnalysis, newsStats, rankedHeadlines, NEWS_DAYS, WEIGHTS, HORIZONS, rebalanceIdx, scores, featuresFor, latestTable, explain, pct, runBacktest, rolling, mean };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Engine = api;
 })(typeof self !== "undefined" ? self : this);

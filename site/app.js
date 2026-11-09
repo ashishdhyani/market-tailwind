@@ -5,11 +5,11 @@
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  let data, dates, series, feats, benchSeries, sectorData = null, newsData = null, fundData = null;
+  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null;
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set() };
   const secCache = {};
   let picksCtx = null;
-  const state = { universe: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null };
+  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -19,10 +19,14 @@
     dates = d.dates;
     series = {}; feats = {};
     for (const t of d.watchlist) { series[t] = toArray(d.prices[t]); feats[t] = E.featuresFor(series[t]); }
-    benchSeries = {};
+    benchSeries = {}; etfSeries = {};
     for (const t of Object.keys(d.benchmarks)) benchSeries[t] = toArray(d.prices[t]);
-    state.universe = new Set(d.watchlist);
-    state.ticker = d.watchlist[0];
+    for (const g of d.groups) if (g.etf) etfSeries[g.etf] = toArray(d.prices[g.etf]);
+    sectorData = E.deriveSectorData(d, (t) => series[t] || etfSeries[t]);   // Sectors view = last ~year of the same prices
+    for (const t of Object.keys(d.prices)) d.prices[t] = true;                // raw JSON arrays are no longer needed; keep the key list
+    state.groups = new Set(d.groups.map((g) => g.name));
+    applyGroups();
+    state.ticker = d.watchlist.includes("AAPL") ? "AAPL" : d.watchlist[0];
     loadHoldings();
 
     $("generated").textContent = d.generated;
@@ -38,9 +42,13 @@
 
   /* ---------- controls ---------- */
 
+  // The universe is whole sector groups (11 US sectors + Singapore), not 500 individual buttons.
+  function applyGroups() {
+    state.universe = new Set(data.groups.filter((g) => state.groups.has(g.name)).flatMap((g) => g.tickers));
+  }
   function buildChips() {
-    $("chips").innerHTML = data.watchlist
-      .map((t) => `<button type="button" class="chip" data-t="${esc(t)}" aria-pressed="true">${esc(t)}</button>`).join("");
+    $("chips").innerHTML = data.groups
+      .map((g) => `<button type="button" class="chip" data-g="${esc(g.name)}" aria-pressed="true">${esc(g.name)} <small>${g.tickers.length}</small></button>`).join("");
   }
 
   function buildHorizons() {
@@ -58,16 +66,19 @@
     $("chips").addEventListener("click", (e) => {
       const b = e.target.closest(".chip");
       if (!b) return;
-      const t = b.dataset.t;
-      state.universe.has(t) ? state.universe.delete(t) : state.universe.add(t);
-      b.setAttribute("aria-pressed", state.universe.has(t));
+      const g = b.dataset.g;
+      state.groups.has(g) ? state.groups.delete(g) : state.groups.add(g);
+      applyGroups();
+      b.setAttribute("aria-pressed", state.groups.has(g));
       render();
     });
     const setAll = (on) => {
-      state.universe = new Set(on ? data.watchlist : []);
-      document.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", on));
+      state.groups = new Set(on ? data.groups.map((g) => g.name) : []);
+      applyGroups();
+      document.querySelectorAll("#chips .chip").forEach((c) => c.setAttribute("aria-pressed", on));
       render();
     };
+    $("rank-more").onclick = () => { state.rankAll = !state.rankAll; renderRank(); };
     $("uni-all").onclick = () => setAll(true);
     $("uni-none").onclick = () => setAll(false);
     $("topn").oninput = (e) => { state.topN = +e.target.value; render(); };
@@ -78,6 +89,13 @@
       if (b) { state.newsSector = b.dataset.sec; renderNews(); }
     });
     $("sector-list").addEventListener("click", (e) => {
+      const more = e.target.closest("[data-more]");
+      if (more) {
+        const wrap = more.previousElementSibling, on = wrap.classList.toggle("show-all");
+        const n = wrap.querySelectorAll("tr.row").length - 1;
+        more.textContent = on ? "Show only the top 10" : `Show all ${n} stocks in ${wrap.querySelector("table").dataset.sector}`;
+        return;
+      }
       const b = e.target.closest("[data-news]");
       if (b) { state.newsSector = b.dataset.news; state.tab = "news"; render(); window.scrollTo(0, 0); }
     });
@@ -106,7 +124,7 @@
   function render() {
     $("topn-val").textContent = state.topN;
     $("cost-val").textContent = state.cost;
-    $("uni-count").textContent = `${state.universe.size} of ${data.watchlist.length}`;
+    $("uni-count").textContent = `${state.universe.size} of ${data.watchlist.length} stocks`;
     $("ctl-summary").textContent = `top ${state.topN} · ${state.cost} bps · ${state.universe.size} stocks`;
     const hz = E.HORIZONS[state.horizon];
     document.querySelectorAll("#horizons button").forEach((b) => b.setAttribute("aria-checked", b.dataset.h === state.horizon));
@@ -191,7 +209,7 @@
   function openDetailRow(table, tr, set) {
     const t = tr.dataset.t, wrap = table.parentElement, cols = tr.children.length;
     const d = document.createElement("tr");
-    d.className = "detail-row";
+    d.className = "detail-row" + (tr.classList.contains("extra") ? " extra" : "");
     d.innerHTML = `<td colspan="${cols}"><div class="detail" style="width:${Math.max(240, wrap.clientWidth - 2)}px">${table._build(t)}</div></td>`;
     tr.after(d);
     tr.setAttribute("aria-expanded", "true");
@@ -211,7 +229,7 @@
     };
     table.querySelectorAll("tr.row").forEach((tr) => { if (set.has(tr.dataset.t)) openDetailRow(table, tr, set); });
   }
-  const rowAttrs = (t) => `class="row" data-t="${esc(t)}" tabindex="0" aria-expanded="false"`;
+  const rowAttrs = (t, extra) => `class="row${extra ? " extra" : ""}" data-t="${esc(t)}" tabindex="0" aria-expanded="false"`;
 
   function renderRank() {
     const u = universe();
@@ -237,7 +255,10 @@
     const head = ["Stock", "Rank", "Price", "Fwd P/E", "Score", "1 week", "2 weeks", "1 month", "12-1m mom.", "6-1m mom.", "Trend", "Volatility", "From 1y high"];
     const pc = (v) => `<td class="${cls(v)}">${E.pct(v, 1, true)}</td>`;
     const fpe = (t) => { const v = infoOf(t)?.fwd_pe; return v > 0 ? v.toFixed(1) : "–"; };
-    const rows = res.rows.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
+    const shown = state.rankAll ? res.rows : res.rows.slice(0, 50);
+    $("rank-more").hidden = res.rows.length <= 50;
+    $("rank-more").textContent = state.rankAll ? "Show only the top 50" : `Show all ${res.rows.length} stocks`;
+    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
       + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
       + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     const table = $("rank-table");
@@ -261,9 +282,11 @@
 
   function renderChart() {
     const sel = $("ticker");
-    const opts = data.watchlist.filter((t) => state.universe.has(t));
+    const gsel = data.groups.filter((g) => state.groups.has(g.name));
+    const opts = gsel.flatMap((g) => g.tickers);
     if (!opts.includes(state.ticker)) state.ticker = opts[0];
-    sel.innerHTML = opts.map((t) => `<option ${t === state.ticker ? "selected" : ""}>${esc(t)}</option>`).join("");
+    sel.innerHTML = gsel.map((g) => `<optgroup label="${esc(g.name)}">${g.tickers.map((t) =>
+      `<option value="${esc(t)}" ${t === state.ticker ? "selected" : ""}>${esc(t)}${shortName(t) ? " · " + esc(shortName(t)) : ""}</option>`).join("")}</optgroup>`).join("");
 
     // Like the Python app: drop gaps first, then take rolling averages on what is left.
     const raw = series[state.ticker], x = [], y = [];
@@ -353,7 +376,7 @@
 
     $("sector-list").innerHTML = res.sectors.map((s) => {
       const fpe = (t) => { const v = infoOf(t)?.fwd_pe; return v > 0 ? v.toFixed(1) : "–"; };
-      const rows = s.stocks.map((r, i) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${i < 3 ? '<span class="tag sug">suggested</span>' : ""}${nameTag(r.ticker)}</td><td>${num(r.price)}</td>`
+      const rows = s.stocks.map((r, i) => `<tr ${rowAttrs(r.ticker, i >= 10)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${i < 3 ? '<span class="tag sug">suggested</span>' : ""}${nameTag(r.ticker)}</td><td>${num(r.price)}</td>`
         + `<td class="${cls(r.ret_5)}">${retTxt(r.ret_5)}</td><td class="${cls(r.ret_21)}">${retTxt(r.ret_21)}</td><td>${fpe(r.ticker)}</td>`
         + `<td>${esc(r.trend_label)}</td><td>${res.hasNews ? esc(toneWord(r.newsZ)) : "n/a"}</td><td>${num(r.final)}</td></tr>`).join("");
       const e = s.etfRow;
@@ -365,6 +388,7 @@
         + (res.hasNews ? `<span>News: ${esc(toneWord(s.newsZ))} · ${s.newsN} headlines</span>` : "") + `</span></summary>`
         + `<div class="body"><h3>Ideas in ${esc(s.name)}</h3><div class="table-wrap"><table data-sector="${esc(s.name)}"><thead><tr><th>Stock</th><th>Price</th><th>1 week</th><th>1 month</th><th>Fwd P/E</th><th>Trend</th><th>News</th><th>Score</th></tr></thead>`
         + `<tbody>${etfRow}${rows}</tbody></table></div>`
+        + (s.stocks.length > 10 ? `<button type="button" class="link" data-more="1">Show all ${s.stocks.length} stocks in ${esc(s.name)}</button>` : "")
         + (res.hasNews ? `<h3>Latest headlines</h3>${newsList(s.headlines, 6)}<button type="button" class="link" data-news="${esc(s.name)}">Read all ${esc(s.name)} news in the News tab →</button>` : "") + `</div></details>`;
     }).join("");
     document.querySelectorAll("#sector-list table").forEach((tb) => wireExpandable(tb, openRows.sec, (t) => detailFor(t, "sector")));
@@ -613,13 +637,9 @@
     .then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.json(); })
     .catch((err) => { if (!optional) throw err; console.warn(err); return null; });
 
-  Promise.all([getJson("data.json"), getJson("sector_data.json", true), getJson("news.json", true), getJson("fundamentals.json", true)])
-    .then(([d, sd, news, fund]) => {
+  Promise.all([getJson("data.json"), getJson("news.json", true), getJson("fundamentals.json", true)])
+    .then(([d, news, fund]) => {
       if (fund && fund.items) fundData = fund;
-      if (sd) {
-        for (const t of Object.keys(sd.prices)) sd.prices[t] = toArray(sd.prices[t]);
-        sectorData = sd;
-      }
       if (news && Array.isArray(news.items)) { newsData = news; $("news-generated").textContent = news.generated; }
       setup(d);
     })

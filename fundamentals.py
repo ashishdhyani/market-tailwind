@@ -10,6 +10,7 @@ Nothing is written if too many tickers fail, so a blocked run keeps the previous
 import json
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from settings import BENCHMARKS, SECTOR_TICKERS, WATCHLIST
 
 OUT = Path(__file__).parent / "site" / "fundamentals.json"
 MIN_OK = 0.8
+WORKERS = 3
 
 
 def _num(v):
@@ -80,20 +82,48 @@ def fetch(ticker: str, retries: int = 1) -> dict:
     return {}
 
 
-def main() -> int:
+def _age_hours(path: Path):
+    try:
+        gen = datetime.strptime(json.loads(path.read_text())["generated"], "%Y-%m-%d %H:%M UTC").replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - gen).total_seconds() / 3600
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def main(argv=None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if "--max-age-hours" in argv:  # skip when the file is recent: these numbers change slowly
+        limit = float(argv[argv.index("--max-age-hours") + 1])
+        age = _age_hours(OUT)
+        if age is not None and age < limit:
+            print(f"fundamentals.json is {age:.1f} h old (< {limit:g} h): skipping.")
+            return 0
     tickers = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
-    items, failed = {}, []
-    for t in tickers:
-        d = fetch(t)
+    try:
+        previous = json.loads(OUT.read_text()).get("items", {})
+    except (OSError, ValueError):
+        previous = {}
+
+    def load(t):
+        time.sleep(0.15)
+        return t, fetch(t)
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        results = list(pool.map(load, tickers))
+    items, failed, kept = {}, [], 0
+    for t, d in results:
         if d.get("name"):
             items[t] = d
         else:
             failed.append(t)
-        time.sleep(0.3)
-    print(f"Fundamentals for {len(items)}/{len(tickers)} tickers.")
+            if t in previous:      # keep the last known numbers rather than dropping the company
+                items[t] = previous[t]
+                kept += 1
+    fresh = len(tickers) - len(failed)
+    print(f"Fundamentals refreshed for {fresh}/{len(tickers)} tickers ({kept} failed ones kept from the previous file).")
     if failed:
-        print("Failed:", ", ".join(failed))
-    if len(items) < MIN_OK * len(tickers):
+        print("Failed:", ", ".join(failed[:40]) + ("…" if len(failed) > 40 else ""))
+    if fresh < MIN_OK * len(tickers):
         print("Too few tickers loaded; keeping the existing fundamentals.json.")
         return 1
     OUT.write_text(json.dumps({"generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "items": items},

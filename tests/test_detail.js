@@ -3,8 +3,10 @@ const fund = require("../site/fundamentals.json").items, news = require("../site
 let bad = 0; const ok = (c, m) => { if (!c) { bad++; console.log("FAIL", m); } };
 
 // Real data end to end: every sector ticker builds a panel in every horizon, in both modes
-const sd = JSON.parse(require("fs").readFileSync(__dirname + "/../site/sector_data.json"));
-for (const k of Object.keys(sd.prices)) sd.prices[k] = Float64Array.from(sd.prices[k], (v) => (v === null ? NaN : v));
+const d = JSON.parse(require("fs").readFileSync(__dirname + "/../site/data.json"));
+const series = {};
+for (const [t, v] of Object.entries(d.prices)) series[t] = Float64Array.from(v, (x) => (x === null ? NaN : x));
+const sd = E.deriveSectorData(d, (t) => series[t]);
 let built = 0;
 for (const h of Object.keys(E.HORIZONS)) {
   const res = E.sectorAnalysis(sd, news, h);
@@ -14,7 +16,9 @@ for (const h of Object.keys(E.HORIZONS)) {
     ok(/Why it is recommended/.test(etf) && /Fund numbers/.test(etf), "etf panel " + s.etf);
     s.stocks.forEach((r, i) => {
       const html = D.buildDetail({ ticker: r.ticker, info: fund[r.ticker], price: r.price, row: r, horizon: h, mode: "sector", sector, stockRank: { k: i + 1, of: s.stocks.length }, news: { n: 3, avg: 0.2, z: r.newsZ, items: s.headlines.slice(0, 3) } });
-      ok(/Key numbers investors look at/.test(html) && /Fundamentals check/.test(html), "stock panel " + r.ticker);
+      // with fundamentals: the key-numbers grid; without (a few tickers always lack them): the explicit fallback line
+      ok(fund[r.ticker] ? /Key numbers investors look at/.test(html) : /No fundamentals data available/.test(html), "stock panel " + r.ticker);
+      ok(/Why it is recommended/.test(html) && /News:/.test(html), "stock panel sections " + r.ticker);
       built++;
     });
   }

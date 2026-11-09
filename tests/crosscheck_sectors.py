@@ -7,9 +7,11 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 import scoring
 
-sd = json.loads((ROOT / "site" / "sector_data.json").read_text())
+d = json.loads((ROOT / "site" / "data.json").read_text())
 news = json.loads((ROOT / "site" / "news.json").read_text())
-px = pd.DataFrame(sd["prices"], index=pd.to_datetime(sd["dates"]), dtype=float)
+# The Sectors view uses the last 320 days of the one price file, and each group's ETF + members
+px = pd.DataFrame(d["prices"], index=pd.to_datetime(d["dates"]), dtype=float).tail(320)
+sd = {"sectors": {g["name"]: {"etf": g["etf"], "stocks": g["tickers"]} for g in d["groups"] if g.get("etf")}}
 etfs = {name: s["etf"] for name, s in sd["sectors"].items()}
 table, _ = scoring.latest_table(px[list(etfs.values())])  # long-term price score, original pandas code
 

@@ -16,6 +16,11 @@ eq(r.holdings.map((h) => [h.t, h.qty]), [["AAPL", 10], ["XOM", 5]], "reordered c
 r = H.parseHoldings("AAPL 10 100\nAAPL 30 200", known);
 eq(r.holdings, [{ t: "AAPL", qty: 40, cost: 175 }], "duplicates add shares and average cost");
 
+// --- broker spellings of class shares map to Yahoo's dash form, and merge with the dash form
+const knownB = new Set(["BRK-B", "BF-B", "AAPL"]);
+eq(H.parseHoldings("BRK.B,3,420\nBRK-B,5,400\nBF/B 2", knownB).holdings, [{ t: "BRK-B", qty: 8, cost: 407.5 }, { t: "BF-B", qty: 2, cost: null }], "BRK.B / BF/B");
+eq(H.parseHoldings("BRK.B 3", new Set()).holdings, [{ t: "BRK.B", qty: 3, cost: null }], "unknown dotted symbol left as typed");
+
 // --- bad input is rejected, never crashes
 r = H.parseHoldings("AAPL -5\n123abc 4\nXOM 0\nMSFT 3 -1\n<script>alert(1)</script>\nTOOLONGTICKERSYMBOL1 5", known);
 eq(r.holdings, [], "all bad rows dropped");

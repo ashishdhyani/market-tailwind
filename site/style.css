@@ -231,3 +231,9 @@ footer b { color: var(--text); }
 .changes .up { color: var(--pos); font-weight: 700; } .changes .down { color: var(--neg); font-weight: 700; }
 #hold-table td { vertical-align: top; }
 #hold-uncovered { margin: 10px 0; }
+
+/* ---- long lists: top rows first, the rest on demand ---- */
+tr.extra, tr.detail-row.extra { display: none; }
+.show-all tr.extra { display: table-row; }
+.chip small { opacity: .65; margin-left: 2px; }
+#rank-more { margin: 8px 0 0; padding-left: 0; font-weight: 600; }

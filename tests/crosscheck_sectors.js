@@ -1,9 +1,11 @@
 // Usage: node tests/crosscheck_sectors.js <python-output.json>
 const fs = require("fs"), E = require("../site/engine.js");
 const py = JSON.parse(fs.readFileSync(process.argv[2]));
-const sd = JSON.parse(fs.readFileSync(__dirname + "/../site/sector_data.json"));
+const d = JSON.parse(fs.readFileSync(__dirname + "/../site/data.json"));
 const news = JSON.parse(fs.readFileSync(__dirname + "/../site/news.json"));
-for (const k of Object.keys(sd.prices)) sd.prices[k] = Float64Array.from(sd.prices[k], (v) => (v === null ? NaN : v));
+const series = {};
+for (const [t, v] of Object.entries(d.prices)) series[t] = Float64Array.from(v, (x) => (x === null ? NaN : x));
+const sd = E.deriveSectorData(d, (t) => series[t]);
 const r = E.sectorAnalysis(sd, news, "long");
 let bad = 0;
 const chk = (n, a, b) => { if (!(Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(b)))) { bad++; console.log("MISMATCH", n, a, b); } };

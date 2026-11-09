@@ -6,7 +6,7 @@
   "use strict";
   const $ = (id) => document.getElementById(id);
   const WORKFLOW = "pages.yml", REF = "main", KEY = "mt_gh_token";
-  const POLL_MS = 8000, TIMEOUT_MS = 8 * 60 * 1000;
+  const POLL_MS = 10000, TIMEOUT_MS = 40 * 60 * 1000;
 
   // On https://<owner>.github.io/<repo>/ derive the repo from the URL; elsewhere (local preview) use the defaults.
   const onPages = location.hostname.endsWith(".github.io");
@@ -56,7 +56,7 @@
         setBusy(false);
         return;
       }
-      say("Refresh started. Downloading prices, news and company data takes about 2 minutes…");
+      say("Refresh started. Downloading prices, news and company data for about 500 stocks takes roughly 10 minutes…");
       const t0 = Date.now();
       let run = null;
       while (Date.now() - t0 < TIMEOUT_MS) {
@@ -73,7 +73,7 @@
         return;
       }
       if (run && run.status === "completed") say(`The refresh did not succeed (${run.conclusion}). Open the run on GitHub to see why: ${run.html_url}`, "err");
-      else say("Still running after 8 minutes. Check the Actions tab on GitHub, then reload this page.", "err");
+      else say("Still running after 40 minutes. Check the Actions tab on GitHub, then reload this page.", "err");
     } catch (e) {
       say(e.message || "Network error.", "err");
     }

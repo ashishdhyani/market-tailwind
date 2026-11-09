@@ -5,7 +5,7 @@
   "use strict";
 
   const MAX_HOLDINGS = 200;
-  const TICKER = /^[A-Z][A-Z0-9.\-]{0,11}$/;
+  const TICKER = /^[A-Z][A-Z0-9.\-/]{0,11}$/;
   const HEADER_WORDS = {
     ticker: ["ticker", "symbol", "stock", "code", "instrument"],
     qty: ["qty", "quantity", "shares", "units", "position", "holding"],
@@ -47,7 +47,8 @@
       }
       let t = (toks[cols.ticker] || "").toUpperCase().replace(/^\$/, "");
       if (!TICKER.test(t)) { rejected.push({ line, reason: "not a ticker symbol" }); return; }
-      if (!known.has(t) && known.has(t + ".SI")) t += ".SI";
+      if (!known.has(t) && known.has(t + ".SI")) t += ".SI";                       // D05 -> D05.SI
+      else if (!known.has(t) && known.has(t.replace(/[./]/g, "-"))) t = t.replace(/[./]/g, "-"); // BRK.B -> BRK-B (Yahoo form)
       const qty = cols.qty >= 0 ? num(toks[cols.qty]) : null;
       const cost = cols.cost >= 0 ? num(toks[cols.cost]) : null;
       if (qty != null && qty <= 0) { rejected.push({ line, reason: "shares must be above zero" }); return; }
