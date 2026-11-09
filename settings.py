@@ -52,6 +52,11 @@ SECTOR_TICKERS = sorted({t for s in SECTORS.values() for t in [s["etf"], *s["sto
 # Index feeds whose headlines are shown as "US market" news (context only; not part of any score).
 MARKET_FEEDS = ["^GSPC", "^DJI", "^IXIC"]  # S&P 500, Dow, Nasdaq
 
+# Reference series: downloaded and exported for the "Other investments" stand-ins (a fund with no price data of its
+# own is tracked through an index ETF), but never ranked or picked. URTH = MSCI World, BNDW = global bonds.
+REFERENCE = ["URTH", "BNDW"]
+
 _all = US + SG + EXTRA
 assert len(_all) == len(set(_all)), f"duplicate tickers in the universe: {sorted({t for t in _all if _all.count(t) > 1})}"
+assert not set(REFERENCE) & set(_all) and not set(REFERENCE) & set(BENCHMARKS), "reference series must be separate from ranked tickers"
 assert not set(BENCHMARKS) & set(_all), "benchmarks (SPY, ES3.SI) are for comparison only and must not be ranked"

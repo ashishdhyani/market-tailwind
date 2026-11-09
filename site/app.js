@@ -1,11 +1,11 @@
 "use strict";
 (function () {
-  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks, Rk = window.Risk, Sb = window.Scoreboard, Pk = window.Picks;
+  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks, Rk = window.Risk, Sb = window.Scoreboard, Pk = window.Picks, Ot = window.Other;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null, picksLog = null, groupOf = {};
+  let data, dates, series, feats, benchSeries, etfSeries, refSeries, sectorData = null, newsData = null, fundData = null, picksLog = null, groupOf = {};
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set(), pb: new Set() };
   const secCache = {};
   let picksCtx = null;
@@ -19,9 +19,10 @@
     dates = d.dates;
     series = {}; feats = {};
     for (const t of d.watchlist) { series[t] = toArray(d.prices[t]); feats[t] = E.featuresFor(series[t]); }
-    benchSeries = {}; etfSeries = {};
+    benchSeries = {}; etfSeries = {}; refSeries = {};
     for (const t of Object.keys(d.benchmarks)) benchSeries[t] = toArray(d.prices[t]);
     for (const g of d.groups) if (g.etf) etfSeries[g.etf] = toArray(d.prices[g.etf]);
+    for (const t of d.reference || []) refSeries[t] = toArray(d.prices[t]);
     sectorData = E.deriveSectorData(d, (t) => series[t] || etfSeries[t]);   // Sectors view = last ~year of the same prices
     for (const t of Object.keys(d.prices)) d.prices[t] = true;                // raw JSON arrays are no longer needed; keep the key list
     state.groups = new Set(d.groups.map((g) => g.name));
@@ -38,6 +39,7 @@
     buildHorizons();
     bindControls();
     bindHoldings();
+    bindOther();
     bindPlan();
     bindPullbacks();
     $("status").hidden = true;
@@ -543,6 +545,143 @@
     $("hold-text").value = holdings.length ? Hd.toCsv(holdings) : "";
   }
 
+  /* ---------- other investments: Endowus funds, CPF, SRS... (values you enter) ---------- */
+
+  const OTHER_KEY = "mt_other";
+  let others = [];
+  const BENCH_TICKERS = new Set(["BNDW", "AGG"]);
+  const BEHAVES = {
+    SPY: { label: "US stocks (S&P 500)", proxy: { SPY: 1 } },
+    URTH: { label: "World stocks (MSCI World)", proxy: { URTH: 1 } },
+    EEM: { label: "Emerging-market stocks", proxy: { EEM: 1 } },
+    STI: { label: "Singapore stocks (STI)", proxy: { "ES3.SI": 1 } },
+    BNDW: { label: "Global bonds", proxy: { BNDW: 1 } },
+    AGG: { label: "US bonds", proxy: { AGG: 1 } },
+    "60/40": { label: "60% world stocks / 40% global bonds", proxy: { URTH: 0.6, BNDW: 0.4 } },
+    "40/60": { label: "40% world stocks / 60% global bonds (like Flagship Measured)", proxy: { URTH: 0.4, BNDW: 0.6 } },
+    "20/80": { label: "20% world stocks / 80% global bonds", proxy: { URTH: 0.2, BNDW: 0.8 } },
+    cash: { label: "Cash or money market (no market movement)", proxy: null, mix: { cash: 1 } },
+    none: { label: "Don't estimate (use only my entries)", proxy: null, mix: { equity: 1 } },
+  };
+  const mixFromProxy = (proxy) => {
+    const m = { equity: 0, bond: 0 };
+    for (const [t, w] of Object.entries(proxy || {})) m[BENCH_TICKERS.has(t) ? "bond" : "equity"] += w;
+    return m;
+  };
+  const today = () => new Date().toISOString().slice(0, 10);
+
+  function loadOther() {
+    const raw = lsGet(OTHER_KEY), known = knownTickers();
+    others = (Array.isArray(raw) ? raw : []).map((r) => Ot.normalize(r, known)).filter((x) => x.item).map((x) => x.item).slice(0, Ot.MAX_ITEMS);
+  }
+  const saveOther = () => lsSet(OTHER_KEY, others);
+  const otherSeries = (t) => series[t] || etfSeries[t] || benchSeries[t] || refSeries[t];
+  const blendCache = new Map();
+  const blendOf = (it) => {
+    if (!it.proxy) return null;
+    const k = JSON.stringify(it.proxy);
+    if (!blendCache.has(k)) blendCache.set(k, Ot.blendSeries(it.proxy, otherSeries, dates.length));
+    return blendCache.get(k);
+  };
+  const standIn = (it) => (it.proxy ? Object.entries(it.proxy).map(([t, w]) => `${(w * 100).toFixed(0)}% ${t}`).join(" + ") : "");
+  const msg = (text, err) => { const el = $("oth-msg"); el.textContent = text; el.style.color = err ? "var(--neg)" : ""; };
+
+  function bindOther() {
+    loadOther();
+    const fill = $("oth-behaves");
+    fill.innerHTML = Object.entries(BEHAVES).map(([k, v]) => `<option value="${esc(k)}">${esc(v.label)}</option>`).join("");
+    $("oth-quick-date").value = today(); $("oth-date").value = today();
+    $("oth-quick-rows").innerHTML = Ot.PRESETS.map((p) => `<div class="oth-qrow"><div class="oth-qname"><b>${esc(p.name)}</b><small class="muted">${esc(p.note)}</small></div>`
+      + `<input type="number" inputmode="decimal" min="0" step="any" placeholder="Value" data-k="${p.key}" data-f="value" aria-label="Value of ${esc(p.name)}">`
+      + `<input type="number" inputmode="decimal" min="0" step="any" placeholder="Put in (optional)" data-k="${p.key}" data-f="invested" aria-label="Amount put into ${esc(p.name)}"></div>`).join("");
+    const toggle = (id) => { const f = $(id); f.hidden = !f.hidden; ["oth-quick", "oth-add"].filter((x) => x !== id).forEach((x) => { $(x).hidden = true; }); };
+    $("oth-quick-toggle").onclick = () => toggle("oth-quick");
+    $("oth-add-toggle").onclick = () => toggle("oth-add");
+    document.querySelectorAll("[data-cancel]").forEach((b) => { b.onclick = () => { $(b.dataset.cancel).hidden = true; }; });
+
+    $("oth-quick").onsubmit = (e) => {
+      e.preventDefault();
+      const cur = $("oth-quick-cur").value, date = $("oth-quick-date").value || today();
+      let added = 0; const errs = [];
+      for (const p of Ot.PRESETS) {
+        const v = $("oth-quick-rows").querySelector(`[data-k="${p.key}"][data-f="value"]`).value, inv = $("oth-quick-rows").querySelector(`[data-k="${p.key}"][data-f="invested"]`).value;
+        if (v === "") continue;
+        const r = Ot.normalize({ name: p.name, platform: p.platform, currency: cur, value: v, invested: inv, mix: p.mix, proxy: p.proxy, updated: date, history: [{ date, value: v, invested: inv === "" ? null : inv }] }, knownTickers());
+        if (r.error) { errs.push(`${p.name}: ${r.error}`); continue; }
+        const dup = others.findIndex((o) => o.name === r.item.name && o.currency === r.item.currency);
+        if (dup >= 0) others[dup] = Ot.addPoint(others[dup], { date, value: v, invested: inv === "" ? null : inv }); else others.push(r.item);
+        added++;
+      }
+      if (errs.length) { msg(errs.join(" "), true); return; }
+      if (!added) { msg("Enter at least one value.", true); return; }
+      saveOther(); $("oth-quick").hidden = true; $("oth-quick").reset(); $("oth-quick-date").value = today(); msg(`Saved ${added} investment${added === 1 ? "" : "s"} in this browser.`); render();
+    };
+    $("oth-add").onsubmit = (e) => {
+      e.preventDefault();
+      const b = BEHAVES[$("oth-behaves").value], date = $("oth-date").value || today();
+      const mix = b.mix || mixFromProxy(b.proxy);
+      const r = Ot.normalize({ name: $v("oth-name"), platform: $v("oth-platform"), currency: $v("oth-cur"), value: $v("oth-value"), invested: $v("oth-invested"), mix, proxy: b.proxy, updated: date, history: [{ date, value: $v("oth-value"), invested: $v("oth-invested") === "" ? null : $v("oth-invested") }] }, knownTickers());
+      if (r.error) { msg(r.error, true); return; }
+      if (others.length >= Ot.MAX_ITEMS) { msg(`You can keep up to ${Ot.MAX_ITEMS} entries.`, true); return; }
+      others.push(r.item); saveOther(); $("oth-add").hidden = true; $("oth-add").reset(); $("oth-date").value = today(); msg("Saved in this browser."); render();
+    };
+    // actions on a card: update value, history, remove
+    $("oth-list").addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]"); if (!btn) return;
+      const card = btn.closest(".oth-card"), id = card.dataset.id, it = others.find((o) => o.id === id); if (!it) return;
+      if (btn.dataset.act === "upd") { const f = card.querySelector(".oth-edit"); f.hidden = !f.hidden; }
+      if (btn.dataset.act === "hist") { const f = card.querySelector(".oth-hist"); f.hidden = !f.hidden; }
+      if (btn.dataset.act === "del") { if (confirm(`Remove "${it.name}" and its history from this browser?`)) { others = others.filter((o) => o.id !== id); saveOther(); msg("Removed."); render(); } }
+    });
+    $("oth-list").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const card = e.target.closest(".oth-card"), it = others.find((o) => o.id === card.dataset.id); if (!it) return;
+      const v = e.target.elements.value.value, inv = e.target.elements.invested.value, date = e.target.elements.date.value || today();
+      const upd = Ot.addPoint(it, { date, value: v, invested: inv === "" ? null : inv });
+      if (upd === it) { msg("Enter a value above zero and a valid date.", true); return; }
+      others = others.map((o) => (o.id === it.id ? upd : o)); saveOther(); msg("Value updated."); render();
+    });
+  }
+
+  function renderOther(covered) {
+    const list = $("oth-list"), sum = $("oth-summary");
+    const money0 = (v, c) => (c === "SGD" ? "S$" : "$") + Math.round(v).toLocaleString("en-US");
+    const now = Date.now();
+    const rows = others.map((it) => {
+      const est = Ot.estimate(it, blendOf(it), dates), age = Ot.ageDays(it.updated, now), st = Ot.staleness(it.updated, now);
+      const g = Ot.gain(it.value, it.invested);
+      return { it, est, age, st, g };
+    });
+    list.innerHTML = rows.length ? rows.map(({ it, est, age, st, g }) => {
+      const ageTxt = age == null ? "" : age === 0 ? "today" : `${age} day${age === 1 ? "" : "s"} ago`;
+      const stale = st === "very" ? `<span class="oth-warn bad">Last updated ${esc(ageTxt)}: please update</span>` : st === "stale" ? `<span class="oth-warn">Last updated ${esc(ageTxt)}</span>` : "";
+      const hist = it.history.slice().reverse().map((h) => `<tr><td>${esc(h.date)}</td><td>${esc(money0(h.value, it.currency))}</td><td>${h.invested != null ? esc(money0(h.invested, it.currency)) : "–"}</td></tr>`).join("");
+      return `<div class="oth-card" data-id="${esc(it.id)}"><div class="oth-head"><b>${esc(it.name)}</b><span class="muted">${esc([it.platform, it.currency].filter(Boolean).join(" · "))}</span></div>`
+        + `<div class="oth-nums"><div><span class="muted">You entered</span> <b>${esc(money0(it.value, it.currency))}</b> <small class="muted">on ${esc(it.updated || "?")}${ageTxt ? " (" + esc(ageTxt) + ")" : ""}</small></div>`
+        + (est ? `<div><span class="muted">Estimated today</span> <b>≈ ${esc(money0(est.estimated, it.currency))}</b> <small class="${cls(est.sinceUpdate)}">${E.pct(est.sinceUpdate, 1, true)} since then, as of ${esc(est.asOf)}</small></div>` : (it.proxy ? "" : `<div><small class="muted">No estimate: ${it.mix && it.mix.cash ? "cash does not move with the market" : "no stand-in index chosen"}.</small></div>`))
+        + (g ? `<div><span class="muted">Put in</span> ${esc(money0(it.invested, it.currency))} · <span class="muted">gain on your entry</span> <b class="${cls(g.amount)}">${g.amount >= 0 ? "+" : "−"}${esc(money0(Math.abs(g.amount), it.currency))} (${E.pct(g.pct, 1, true)})</b></div>` : "")
+        + (it.proxy ? `<div><small class="muted">Estimate follows: ${esc(standIn(it))}. A rough guide: fees, currency and hedging are ignored.</small></div>` : "") + `</div>`
+        + (stale ? `<div>${stale}</div>` : "")
+        + `<div class="ed-actions"><button type="button" class="btn alt" data-act="upd">Update value</button><button type="button" class="link" data-act="hist">History (${it.history.length})</button><button type="button" class="link danger" data-act="del">Remove</button></div>`
+        + `<form class="oth-edit oth-form" hidden><div class="plan-grid"><label>New value<input name="value" type="number" inputmode="decimal" min="0" step="any" required></label>`
+        + `<label>Value as of<input name="date" type="date" value="${today()}"></label><label class="wide">Amount put in (optional)<input name="invested" type="number" inputmode="decimal" min="0" step="any" value="${it.invested != null ? it.invested : ""}"></label></div><div class="ed-actions"><button type="submit" class="btn">Save</button></div></form>`
+        + `<div class="oth-hist" hidden><div class="table-wrap"><table><thead><tr><th>Date</th><th>Value</th><th>Put in</th></tr></thead><tbody>${hist || '<tr><td colspan="3">No history yet</td></tr>'}</tbody></table></div></div></div>`;
+    }).join("") : '<p class="note">Nothing here yet. Use “Add my Endowus funds” to start.</p>';
+
+    // All your investments: directly held stocks/ETFs (by asset class) + these entries (estimated value when there is one)
+    const entries = [];
+    for (const x of covered) if (x.h.qty) entries.push({ currency: x.currency, value: x.h.qty * x.row.price, mix: { [Ot.classifyHolding(x.info)]: 1 }, direct: true });
+    for (const { it, est } of rows) entries.push({ currency: it.currency, value: est ? est.estimated : it.value, mix: it.mix, direct: false });
+    const all = Ot.allocate(entries);
+    const parts = { equity: "Stocks & equity funds", bond: "Bonds", cash: "Cash", other: "Other (gold, crypto…)" };
+    const direct = {}, other = {};
+    for (const e of entries) { const m = e.direct ? direct : other; m[e.currency] = (m[e.currency] || 0) + e.value; }
+    sum.innerHTML = Object.keys(all).length && rows.length ? `<h3 class="plan-h">All your investments (by currency; no conversion yet)</h3>` + Object.entries(all).map(([c, a]) =>
+      `<div class="cur-block"><h3>${esc(c)} <small>${esc(money0(a.total, c))} in total · stocks and ETFs you hold directly ${esc(money0(direct[c] || 0, c))} · other investments ${esc(money0(other[c] || 0, c))}</small></h3>`
+      + Object.entries(parts).filter(([k]) => a[k] > 0).map(([k, label]) => `<div class="bar-row"><span class="bar-label" title="${esc(label)}">${esc(label)}</span><span class="bar"><i style="width:${(a[k] / a.total * 100).toFixed(1)}%"></i></span><span class="bar-val">${(a[k] / a.total * 100).toFixed(0)}%</span></div>`).join("")
+      + `</div>`).join("") + `<p class="note">Other investments use the estimated value when there is one. Mixed portfolios are split by their stated mix (for example 40% equities / 60% bonds). Direct ETFs are classed by their Yahoo category, which is approximate.</p>` : "";
+  }
+
   /* ---------- risk check: how a set of positions has behaved together ---------- */
 
   /* positions: [{t, value}] in one currency. Compared with SPY (USD) or the STI ETF (SGD). */
@@ -794,6 +933,7 @@
     // --- concentration (weights within each currency)
     const valued = covered.filter((x) => x.h.qty).map((x) => ({ t: x.t, value: x.h.qty * x.row.price, currency: x.currency, group: x.group }));
     const sums = Hd.summarize(valued);
+    renderOther(covered);
     const weightOf = new Map(sums.flatMap((c) => c.items.map((i) => [i.t, i.weight])));
     $("hold-summary").innerHTML = sums.map((c) => `<div class="cur-block"><h3>${esc(c.currency)} holdings <small>${esc(money(c.total, c.currency))} · ${c.count} position${c.count === 1 ? "" : "s"}</small></h3>`
       + `<p class="note" style="margin:2px 0 6px">Largest position: <b>${esc(c.top.t)}</b> at ${(c.top.weight * 100).toFixed(0)}% of your ${esc(c.currency)} holdings. Split by sector:</p>`

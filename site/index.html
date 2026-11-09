@@ -145,6 +145,38 @@
         <p id="hold-msg" class="note" role="status"></p>
       </div>
     </details>
+    <details class="editor" id="other-box">
+      <summary>Other investments <small class="muted">(Endowus, CPF, SRS, bank…)</small></summary>
+      <div class="ed-body">
+        <p class="note">For things with no live price in this app, such as Endowus funds and portfolios. <b>You enter what each is worth from the provider's app</b>; the app keeps a dated history, gives a <b>rough estimate of today's value</b> by following a similar index, and counts the money in your overall split. The estimate ignores fees, currency moves and hedging, so the real value is always the one in the provider's own app. Everything stays in this browser.</p>
+        <div id="oth-list"></div>
+        <div class="ed-actions">
+          <button type="button" id="oth-quick-toggle" class="btn alt">Add my Endowus funds</button>
+          <button type="button" id="oth-add-toggle" class="btn alt">Add something else</button>
+        </div>
+        <form id="oth-quick" class="oth-form" hidden>
+          <p class="note" style="margin:0 0 6px">Enter today's value of each fund from the Endowus app (leave blank to skip a fund). The amount you have put in is optional but lets the app show your gain.</p>
+          <div id="oth-quick-rows"></div>
+          <div class="plan-grid"><label>Currency<select id="oth-quick-cur"><option>SGD</option><option>USD</option></select></label>
+            <label>Value as of<input id="oth-quick-date" type="date"></label></div>
+          <div class="ed-actions"><button type="submit" class="btn">Save</button><button type="button" class="link" data-cancel="oth-quick">Cancel</button></div>
+        </form>
+        <form id="oth-add" class="oth-form" hidden>
+          <div class="plan-grid">
+            <label class="wide">Name<input id="oth-name" maxlength="90" placeholder="e.g. CPF Ordinary Account" autocomplete="off"></label>
+            <label>Platform<input id="oth-platform" maxlength="50" placeholder="Endowus, CPF, bank…" autocomplete="off"></label>
+            <label>Currency<select id="oth-cur"><option>SGD</option><option>USD</option></select></label>
+            <label>Current value<input id="oth-value" type="number" inputmode="decimal" min="0" step="any"></label>
+            <label>Amount put in (optional)<input id="oth-invested" type="number" inputmode="decimal" min="0" step="any"></label>
+            <label>Value as of<input id="oth-date" type="date"></label>
+            <label class="wide">Behaves like<select id="oth-behaves"></select></label>
+          </div>
+          <div class="ed-actions"><button type="submit" class="btn">Save</button><button type="button" class="link" data-cancel="oth-add">Cancel</button></div>
+        </form>
+        <p id="oth-msg" class="note" role="status"></p>
+        <div id="oth-summary"></div>
+      </div>
+    </details>
     <details class="editor" id="plan-box">
       <summary>Cash planner <small class="muted">(a calculator, not advice)</small></summary>
       <div class="ed-body">
@@ -248,6 +280,7 @@
 <script src="holdings.js"></script>
 <script src="pullbacks.js"></script>
 <script src="risk.js"></script>
+<script src="other.js"></script>
 <script src="picks.js"></script>
 <script src="scoreboard.js"></script>
 <script src="detail.js"></script>

@@ -61,6 +61,10 @@ for t in ("IONQ", "RGTI", "QBTS", "QUBT"): assert settings.EXTRA_GROUPS["Quantum
 assert "QMCO" not in settings.EXTRA, "QMCO is Quantum Corp (data storage), not quantum computing"
 assert set(settings.EXTRA_GROUPS["Sector ETFs"]) == set(settings.SECTOR_ETFS.values())
 
+# reference series (stand-ins for funds without prices of their own) are exported but never ranked or grouped
+assert settings.REFERENCE == ["URTH", "BNDW"] and not set(settings.REFERENCE) & set(settings.WATCHLIST)
+assert not set(settings.REFERENCE) & set(settings.BENCHMARKS)
+
 # the exported groups mark exactly the hand-picked ones
 import export_web
 present = set(settings.WATCHLIST) | set(settings.SECTOR_ETFS.values())
@@ -68,4 +72,5 @@ groups = export_web.build_groups(present)
 assert [g["name"] for g in groups if g.get("picked")] == ["Singapore", *settings.EXTRA_GROUPS]
 assert all("etf" in g for g in groups if not g.get("picked")) and len(groups) == 11 + 1 + len(settings.EXTRA_GROUPS)
 assert sorted(t for g in groups for t in g["tickers"]) == sorted(settings.WATCHLIST), "every ranked ticker is in exactly one group"
+assert not any(t in settings.REFERENCE for g in groups for t in g["tickers"]), "reference series are not in any group"
 print("universe: ALL OK")

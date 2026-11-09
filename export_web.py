@@ -16,14 +16,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import data
-from settings import BENCHMARKS, EXTRA_GROUPS, SECTOR_ETFS, SECTOR_TICKERS, SECTORS, SG, WATCHLIST
+from settings import BENCHMARKS, EXTRA_GROUPS, REFERENCE, SECTOR_ETFS, SECTOR_TICKERS, SECTORS, SG, WATCHLIST
 
 SITE = Path(__file__).parent / "site"
 OUT = SITE / "data.json"
 HISTORY_START = "2020-01-01"
 SIG_DIGITS = 5            # relative precision (works for tiny dividend-adjusted prices too); ~0.003% on a daily return
 MAX_MISSING_FRAC = 0.03
-ALL_TICKERS = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
+ALL_TICKERS = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS) | set(REFERENCE))
 
 
 def build_groups(present: set) -> list:
@@ -43,7 +43,7 @@ def build_groups(present: set) -> list:
 
 
 def export() -> None:
-    wanted = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_ETFS.values()))
+    wanted = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_ETFS.values()) | set(REFERENCE))
     prices = data.load_prices(wanted)  # already forward-filled over short holidays
     prices = prices.loc[HISTORY_START:]
     present = [t for t in wanted if t in prices.columns and prices[t].notna().any()]
@@ -55,6 +55,7 @@ def export() -> None:
         "dates": [d.strftime("%Y-%m-%d") for d in prices.index],
         "watchlist": watchlist,
         "benchmarks": {t: n for t, n in BENCHMARKS.items() if t in present_set},
+        "reference": [t for t in REFERENCE if t in present_set],
         "groups": build_groups(present_set),
         "prices": {
             t: [None if v != v else float(f"{v:.{SIG_DIGITS}g}") for v in prices[t].tolist()]

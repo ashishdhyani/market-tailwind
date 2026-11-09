@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yfinance as yf
 
-from settings import BENCHMARKS, SECTOR_TICKERS, WATCHLIST
+from settings import BENCHMARKS, REFERENCE, SECTOR_TICKERS, WATCHLIST
 
 OUT = Path(__file__).parent / "site" / "fundamentals.json"
 MIN_OK = 0.8
@@ -118,7 +118,7 @@ def should_skip(age_hours, limit_hours, tickers, previous) -> bool:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    tickers = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
+    tickers = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS) | set(REFERENCE))
     try:
         previous = json.loads(OUT.read_text()).get("items", {})
     except (OSError, ValueError):

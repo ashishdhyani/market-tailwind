@@ -12,7 +12,7 @@ Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM 
 - **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_risk.js`, `tests/test_scoreboard.js`, `tests/test_protect.mjs`)
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_risk.js`, `tests/test_other.js`, `tests/test_scoreboard.js`, `tests/test_protect.mjs`)
 
 ## Python / Streamlit version (original)
 
@@ -45,6 +45,10 @@ streamlit run app.py      # open the dashboard
 ## Scoreboard (forward, out-of-sample)
 
 Backtests here are flattered by survivorship bias, so the Scoreboard keeps a record that cannot be: every refresh, `tools/snapshot_picks.mjs` appends the app's **default** picks (Rankings top 5 for each of the six horizons, Pullbacks top 5, and the leader of each of the top 3 sectors) to `site/picks_log.json`, which the workflow commits. Git history therefore shows when each list was written, before anyone knew how it turned out. The Scoreboard tab then measures those exact lists: equal-weighted, bought at the next trading day's close (the same one-day delay as the backtest), against SPY after 6 months, 3 months and 1 month (1 week is not shown: too noisy), before costs and taxes. The 1-month table fills in first, about a month after the first snapshot; the 6-month table needs about half a year of history. Nothing is backfilled. A damaged log makes the tool stop instead of overwriting it. Early on it is a tiny sample (daily lists overlap), so every average carries its count, a standard error and the number of independent windows. Logic and tests: `site/picks.js`, `site/scoreboard.js`, `tests/test_scoreboard.js`.
+
+## Other investments (Endowus, CPF, SRS, bank…)
+
+Things with no live price here (for example Endowus Fund Smart funds and Flagship portfolios) can be recorded under Holdings → "Other investments". You enter the value from the provider's app, with the date; the app keeps a dated history, shows your gain if you give the amount put in, warns when an entry is stale (30 / 90 days), and **estimates today's value** by following a stand-in index since your last entry (a fund tracking the S&P 500 follows SPY, an emerging-markets fund follows EEM, a world fund follows URTH, a 40/60 Flagship portfolio follows 40% URTH + 60% BNDW). The estimate ignores fees, currency moves and hedging and is labelled rough. The money also feeds an "All your investments" split into stocks, bonds, cash and other (mixed portfolios are split by their stated mix; directly held ETFs by their Yahoo category). Currencies are not converted yet. URTH and BNDW are exported as `reference` series (`REFERENCE` in `settings.py`): downloaded but never ranked. Everything stays in the browser. Logic and tests: `site/other.js`, `tests/test_other.js`.
 
 ## Event risk: earnings and ex-dividend dates
 

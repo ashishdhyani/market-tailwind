@@ -287,3 +287,14 @@ td.earn { white-space: nowrap; font-size: .82rem; }
 td.earn.none { color: var(--muted); }
 td.earn.near { color: #d99a00; font-weight: 600; }
 td.earn.soon { color: var(--neg); font-weight: 700; }
+
+/* ---- other investments ---- */
+.oth-card { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0 0 10px; }
+.oth-head { display: flex; flex-direction: column; margin-bottom: 4px; } .oth-head .muted { font-size: .78rem; }
+.oth-nums { font-size: .88rem; display: grid; gap: 3px; }
+.oth-warn { display: inline-block; font-size: .78rem; font-weight: 600; color: #d99a00; margin-top: 4px; } .oth-warn.bad { color: var(--neg); }
+.oth-form { background: var(--card); border: 1px dashed var(--line); border-radius: 10px; padding: 10px; margin: 8px 0; }
+.oth-form[hidden], .oth-hist[hidden] { display: none; }
+.oth-qrow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.oth-qrow .oth-qname { grid-column: 1 / -1; display: flex; flex-direction: column; font-size: .86rem; }
+.oth-qrow input, .oth-form input[type=text], .oth-form input:not([type]), .oth-form input[type=date] { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
