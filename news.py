@@ -26,9 +26,10 @@ import certifi
 import sentiment
 from concurrent.futures import ThreadPoolExecutor
 
-from settings import MARKET_FEEDS, SECTOR_ETFS, SECTOR_TICKERS
+from settings import EXTRA, MARKET_FEEDS, SECTOR_ETFS, SECTOR_TICKERS
 
 OUT = Path(__file__).parent / "site" / "news.json"
+NEWS_TICKERS = sorted(set(SECTOR_TICKERS) | set(EXTRA))   # S&P 500 + sector ETFs, plus the ETFs and quantum names
 FEED = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={}&region=US&lang=en-US"
 KEEP_DAYS = 10
 PER_STOCK = 5      # ~500 stocks: a few headlines each keeps news.json small
@@ -103,12 +104,12 @@ def collect(tickers, market=(), pause: float = 0.1):
 
 
 def main() -> int:
-    articles, ok, failed = collect(SECTOR_TICKERS, MARKET_FEEDS)
+    articles, ok, failed = collect(NEWS_TICKERS, MARKET_FEEDS)
     n_market = sum(1 for a in articles.values() if a["market"])
-    print(f"Read {ok}/{len(SECTOR_TICKERS)} ticker feeds, {len(articles)} articles ({n_market} market-wide).")
+    print(f"Read {ok}/{len(NEWS_TICKERS)} ticker feeds, {len(articles)} articles ({n_market} market-wide).")
     if failed:
         print("Failed:", ", ".join(failed))
-    if ok < MIN_FEEDS_OK * len(SECTOR_TICKERS) or not articles:
+    if ok < MIN_FEEDS_OK * len(NEWS_TICKERS) or not articles:
         print("Too few feeds loaded; keeping the existing news.json.")
         return 1
     items = []

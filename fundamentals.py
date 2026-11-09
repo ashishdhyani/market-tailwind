@@ -90,19 +90,28 @@ def _age_hours(path: Path):
         return None
 
 
+def should_skip(age_hours, limit_hours, tickers, previous) -> bool:
+    """Skip a refresh only if the file is recent AND already has every current ticker (so a newly added ETF or
+    stock gets its numbers straight away instead of waiting for the next daily refresh)."""
+    return age_hours is not None and age_hours < limit_hours and all(t in previous for t in tickers)
+
+
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
-    if "--max-age-hours" in argv:  # skip when the file is recent: these numbers change slowly
-        limit = float(argv[argv.index("--max-age-hours") + 1])
-        age = _age_hours(OUT)
-        if age is not None and age < limit:
-            print(f"fundamentals.json is {age:.1f} h old (< {limit:g} h): skipping.")
-            return 0
     tickers = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
     try:
         previous = json.loads(OUT.read_text()).get("items", {})
     except (OSError, ValueError):
         previous = {}
+    if "--max-age-hours" in argv:  # skip when the file is recent: these numbers change slowly
+        limit = float(argv[argv.index("--max-age-hours") + 1])
+        age = _age_hours(OUT)
+        if should_skip(age, limit, tickers, previous):
+            print(f"fundamentals.json is {age:.1f} h old (< {limit:g} h) and complete: skipping.")
+            return 0
+        missing = [t for t in tickers if t not in previous]
+        if missing:
+            print(f"{len(missing)} tickers have no numbers yet ({', '.join(missing[:8])}...): refreshing.")
 
     def load(t):
         time.sleep(0.15)

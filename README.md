@@ -1,7 +1,7 @@
 # Market Tailwind
 
 Finds the US sectors with momentum and good news behind them (and suggests stocks and ETFs in them), ranks the full
-S&P 500 plus 15 Singapore stocks by momentum, trend and risk, and backtests the ranking. Uses only free data (Yahoo Finance via `yfinance`).
+S&P 500, 15 Singapore stocks, quantum-computing stocks and about 60 ETFs by momentum, trend and risk, and backtests the ranking. Uses only free data (Yahoo Finance via `yfinance`).
 
 ## Web version (GitHub Pages, works on iPhone)
 
@@ -31,7 +31,7 @@ streamlit run app.py      # open the dashboard
 
 | File | Purpose |
 |------|---------|
-| `settings.py` | Universe: the full S&P 500 (from `sp500.csv`) plus 15 Singapore stocks, benchmarks, sector ETFs. Edit the Singapore list here. |
+| `settings.py` | Universe: the full S&P 500 (from `sp500.csv`), 15 Singapore stocks, and the hand-picked `EXTRA_GROUPS` (quantum-computing stocks and about 60 ETFs: AI and tech, themes, index and international, commodities, crypto and bonds, sector ETFs). Edit the Singapore list and `EXTRA_GROUPS` here. |
 | `universe.py` | Refreshes `sp500.csv` (current S&P 500 members and sectors) from a public dataset. |
 | `data.py` | Download prices and store/load them with SQLite. |
 | `scoring.py` | Features and composite score, plus the "why" text for each pick. |
@@ -41,6 +41,10 @@ streamlit run app.py      # open the dashboard
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
+
+## ETFs and quantum stocks
+
+Besides the S&P 500 and 15 Singapore stocks, the ranking covers hand-picked groups listed in `settings.py` (`EXTRA_GROUPS`): **quantum computing** (IonQ, Rigetti, D-Wave, Quantum Computing Inc, Arqit, SEALSQ, Infleqtion, plus the QTUM ETF) and ETFs in five groups (AI & tech incl. AGIX and AIPO, themes, index/income/international, commodity/crypto/bond, and the 11 sector ETFs). They are ranked with the same price-only score. Funds have no company financials, so the fundamentals checks and loss warnings do not apply to them. Each group has its own button in Controls. These lists are chosen with hindsight, so a backtest that includes them is flattered (the Backtest tab says so). To add a ticker, put it in `EXTRA_GROUPS` and run the refresh. Note: QMCO is Quantum Corporation (data storage), not quantum computing, so it is deliberately not included.
 
 ## Horizons
 

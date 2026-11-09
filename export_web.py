@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import data
-from settings import BENCHMARKS, SECTOR_ETFS, SECTOR_TICKERS, SECTORS, SG, WATCHLIST
+from settings import BENCHMARKS, EXTRA_GROUPS, SECTOR_ETFS, SECTOR_TICKERS, SECTORS, SG, WATCHLIST
 
 SITE = Path(__file__).parent / "site"
 OUT = SITE / "data.json"
@@ -27,15 +27,18 @@ ALL_TICKERS = sorted(set(WATCHLIST) | set(BENCHMARKS) | set(SECTOR_TICKERS))
 
 
 def build_groups(present: set) -> list:
-    """Groups the app lets you filter by: the 11 sectors (with their ETF) and Singapore."""
+    """Groups the app lets you filter by: the 11 S&P 500 sectors (with their ETF), then the hand-picked groups
+    (Singapore, quantum computing, ETFs), which are flagged so the backtest can warn about hindsight bias."""
     groups = []
     for name, etf in SECTOR_ETFS.items():
         stocks = [t for t in SECTORS[name]["stocks"] if t in present]
         if etf in present and stocks:
             groups.append({"name": name, "etf": etf, "tickers": stocks})
-    sg = [t for t in SG if t in present]
-    if sg:
-        groups.append({"name": "Singapore", "tickers": sg})
+    picked = {"Singapore": SG, **EXTRA_GROUPS}
+    for name, tickers in picked.items():
+        here = [t for t in tickers if t in present]
+        if here:
+            groups.append({"name": name, "tickers": here, "picked": True})
     return groups
 
 

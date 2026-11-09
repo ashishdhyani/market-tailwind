@@ -5,7 +5,7 @@
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null;
+  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null, groupOf = {};
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set() };
   const secCache = {};
   let picksCtx = null;
@@ -25,6 +25,7 @@
     sectorData = E.deriveSectorData(d, (t) => series[t] || etfSeries[t]);   // Sectors view = last ~year of the same prices
     for (const t of Object.keys(d.prices)) d.prices[t] = true;                // raw JSON arrays are no longer needed; keep the key list
     state.groups = new Set(d.groups.map((g) => g.name));
+    for (const g of d.groups) for (const t of g.tickers) groupOf[t] = g.name;
     state.profitOnly = lsGet("mt_profit_only") === true;
     $("profit-only").checked = state.profitOnly;
     applyGroups();
@@ -179,6 +180,7 @@
   // ⚠ next to a stock that reports a loss (negative ROE or net margin), with the numbers on hover / tap.
   const lossFlag = (t) => { const l = F.lossInfo(infoOf(t)); return l ? ` <span class="flag" title="${esc(l.text)}">⚠</span>` : ""; };
   const lossLine = (t) => { const l = F.lossInfo(infoOf(t)); return l ? `<span class="flag-line">⚠ ${esc(l.text)}</span>` : ""; };
+  const etfTag = (t) => (infoOf(t)?.type === "ETF" ? ' <span class="tag">ETF</span>' : "");
   const nameTag = (t) => { const n = shortName(t); return n ? `<small class="nm">${esc(n)}</small>` : ""; };
 
   // The loss-filtered view of the sector data (cached); `raw` (holdings) always sees every stock.
@@ -271,7 +273,7 @@
     $("picks").innerHTML = res.rows.slice(0, state.topN).map((r) => {
       const info = infoOf(r.ticker), brief = F.brief(info);
       return `<li><details class="stock" data-t="${esc(r.ticker)}" ${openRows.picks.has(r.ticker) ? "open" : ""}><summary>`
-        + `<span class="st-head"><b>${r.rank}. ${esc(r.ticker)}</b>${nameTag(r.ticker)}</span>`
+        + `<span class="st-head"><b>${r.rank}. ${esc(r.ticker)}</b>${etfTag(r.ticker)}${nameTag(r.ticker)}</span>`
         + `<span class="why">${esc(E.explain(r, state.horizon))}</span>`
         + (brief ? `<span class="brief">${esc(brief)}</span>` : "") + lossLine(r.ticker) + `<span class="more">Tap for details</span></summary>`
         + `<div class="detail">${openRows.picks.has(r.ticker) ? detailFor(r.ticker, "rank", r, { n: r.rank, of: total }) : ""}</div></details></li>`;
@@ -284,7 +286,7 @@
     const shown = state.rankAll ? res.rows : res.rows.slice(0, 50);
     $("rank-more").hidden = res.rows.length <= 50;
     $("rank-more").textContent = state.rankAll ? "Show only the top 50" : `Show all ${res.rows.length} stocks`;
-    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${lossFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
+    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${etfTag(r.ticker)}${lossFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
       + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.ret_63)}${pc(r.ret_126)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
       + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     const table = $("rank-table");
@@ -338,8 +340,10 @@
     const res = btCache.res;
     const hz = E.HORIZONS[state.horizon];
     const cadence = { month: "monthly", "2week": "every 2 weeks", week: "weekly" }[hz.rebalance];
+    const pickedOn = data.groups.filter((g) => g.picked && state.groups.has(g.name));
     $("bt-desc").textContent = `Picks ranked by ${hz.blurb}, rebalanced ${cadence}.`
-      + (state.profitOnly ? " The “hide companies that report a loss” switch does not apply here: it uses today's financials, and applying them to the past would be look-ahead bias." : "");
+      + (state.profitOnly ? " The “hide companies that report a loss” switch does not apply here: it uses today's financials, and applying them to the past would be look-ahead bias." : "")
+      + (pickedOn.length ? ` Includes hand-picked groups (${pickedOn.map((g) => g.name).join(", ")}): they were chosen with hindsight, so results can look better than a real investor could have achieved. Untick them in Controls for a cleaner test.` : "");
     const traces = Object.entries(res.equity).map(([name, eq]) => ({
       x: res.dates, y: Array.from(eq), name, type: "scatter", mode: "lines", line: { width: 2 },
     }));
@@ -477,7 +481,7 @@
       newsWord: news && news.n ? D.toneWord(news) : null,
       fund: ev && ev.summary && ev.summary.label !== "Not enough data" ? ev.summary.label : null,
       currency: info?.currency || (t.endsWith(".SI") ? "SGD" : "USD"), covered: !!row,
-      group: sc.s ? sc.s.name : YAHOO_SECTOR[info?.sector] || info?.sector || (info?.type === "ETF" ? "Other ETFs" : "Other") };
+      group: sc.s ? sc.s.name : info?.type === "ETF" ? groupOf[t] || info.category || "Other ETFs" : YAHOO_SECTOR[info?.sector] || info?.sector || "Other" };
   }
 
   function holdingDetail(t) {
@@ -575,7 +579,7 @@
         const r = x.row, h = x.h, val = h.qty ? h.qty * r.price : null, w = weightOf.get(x.t);
         const pl = h.cost ? r.price / h.cost - 1 : null;
         const rank = x.rank ? `#${x.rank.n}/${x.rank.of}` : x.sc.stock ? `#${x.sc.k} in ${esc(x.sc.sector.name)}` : "–";
-        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${lossFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
+        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${etfTag(x.t)}${lossFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
           + `<td>${val ? esc(money(val, x.currency)) : "–"}</td><td>${w != null ? (w * 100).toFixed(0) + "%" : "–"}</td>${pc(pl)}<td>${esc(r.trend_label)}</td>${pc(r.ret_5)}${pc(r.ret_21)}`
           + `<td>${x.newsWord ? esc(x.newsWord) : "–"}</td><td>${x.fund ? esc(x.fund) : x.info?.type === "ETF" ? "ETF" : "–"}</td><td>${rank}</td></tr>`;
       }).join("");

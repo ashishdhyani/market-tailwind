@@ -27,4 +27,12 @@ assert f["category"] == "Equity Energy" and "fwd_pe" not in f
 # Empty / hostile input does not crash
 assert normalize({}) == {}
 assert normalize({"longName": "X", "forwardPE": "n/a", "marketCap": float("inf")}) == {"name": "X"}
+# the daily refresh is skipped only when the file is recent AND already covers every ticker
+from fundamentals import should_skip
+have = {"AAPL": {}, "XOM": {}}
+assert should_skip(5, 20, ["AAPL", "XOM"], have) is True
+assert should_skip(25, 20, ["AAPL", "XOM"], have) is False            # too old
+assert should_skip(5, 20, ["AAPL", "XOM", "AGIX"], have) is False     # a new ticker was added -> refresh now
+assert should_skip(None, 20, ["AAPL"], have) is False                 # no file / unreadable
+assert should_skip(5, 20, [], {}) is True
 print("fundamentals normalize: ALL OK")
