@@ -42,6 +42,10 @@ streamlit run app.py      # open the dashboard
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
+## Loss warnings
+
+The score is price-only, so a stock that reports a loss (negative ROE or net margin, about 4% of the list) can rank high on momentum. Those stocks get a ⚠ and a warning banner, and a Controls switch, "Hide companies that report a loss", removes them from Rankings, Sectors and the chart list. The backtest ignores the switch (today's financials applied to the past would be look-ahead bias).
+
 ## My Holdings (private)
 
 The Holdings tab lets you enter what you own (paste rows or load a CSV: `ticker, shares, average cost`, with or without a header row such as `Symbol, Quantity, Avg Price`). It shows each position next to the app's signals (trend, news tone, ranking, fundamentals check), your concentration by sector, and **what changed since the previous data update** (trend, ranking bucket, news tone, fundamentals check, price moves of 5% or more).

@@ -36,6 +36,18 @@ ok(etf.summary === null && st(etf, "expense") === "good" && st(etf, "aum") === "
 ok(F.brief({ type: "EQUITY", fwd_pe: 9.75, roe: 0.225, rev_growth: 0.587 }) === "Fwd P/E 9.8× · ROE 23% · Rev +59%", "brief: " + F.brief({ type: "EQUITY", fwd_pe: 9.75, roe: 0.225, rev_growth: 0.587 }));
 ok(F.money(8.2309e10, "USD") === "$82.3B" && F.money(2.1168e11, "SGD") === "S$212B" && F.money(12.5, "USD") === "$12.50", "money " + F.money(2.1168e11, "SGD"));
 
+// "reports a loss": negative ROE and/or net margin only; ETFs, zero and missing data are never flagged
+ok(F.lossInfo({ type: "EQUITY", roe: -0.345, net_margin: -1.1045 }).text === "Reports a loss: ROE -35%, net margin -110%", "loss text");
+ok(F.lossInfo({ type: "EQUITY", roe: 0.2, net_margin: -0.01 }).text === "Reports a loss: net margin -1%", "margin only");
+ok(F.lossInfo({ type: "EQUITY", roe: 0.2, net_margin: 0.1 }) === null && F.lossInfo({ type: "EQUITY", roe: 0, net_margin: 0 }) === null, "profitable / zero is not a loss");
+ok(F.lossInfo({ type: "EQUITY" }) === null && F.lossInfo(undefined) === null && F.lossInfo({ type: "ETF", roe: -1 }) === null, "no data / ETF");
+ok(F.isLossMaking({ type: "EQUITY", roe: -1 }) && !F.isLossMaking({ type: "EQUITY", roe: 1 }), "isLossMaking");
+{ // on the real data a small minority is flagged (a rule that flagged a third of the list would be noise)
+  const all = Object.values(require("../site/fundamentals.json").items).filter((i) => i.type !== "ETF");
+  const share = all.filter(F.isLossMaking).length / all.length;
+  ok(share > 0.005 && share < 0.15, "loss-maker share looks sane: " + share.toFixed(3));
+}
+
 // every real ticker evaluates without throwing
 const fd = require("../site/fundamentals.json").items;
 let n = 0; for (const [t, i] of Object.entries(fd)) { try { F.evaluate(i, i.hi52 ? (i.hi52 + i.lo52) / 2 : 10); n++; } catch (x) { bad++; console.log("THROW", t, x.message); } }

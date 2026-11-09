@@ -111,7 +111,9 @@
 
     const factList = ev ? [ev.name, ...(ev.facts || [])].filter(Boolean) : [];
     const facts = factList.length ? `<p class="facts">${factList.map(esc).join(" · ")}</p>` : "";
-    return `<div class="detail-inner">${facts}<h4>${mode === "holding" ? "Where it stands today" : "Why it is recommended"}</h4><ul class="why-list">${why.map((w) => `<li>${w}</li>`).join("")}</ul>`
+    const loss = F.lossInfo(info);
+    const lossBanner = loss ? `<div class="warn-banner"><b>⚠ ${esc(loss.text)}.</b> The ranking looks at price behaviour only, so a company that reports a loss can still rank high on momentum alone. Check why before relying on the idea.</div>` : "";
+    return `<div class="detail-inner">${facts}${lossBanner}<h4>${mode === "holding" ? "Where it stands today" : "Why it is recommended"}</h4><ul class="why-list">${why.map((w) => `<li>${w}</li>`).join("")}</ul>`
       + (grid ? `<h4>${isEtf ? "Fund numbers" : "Key numbers investors look at"}</h4>${grid}` : "") + legend + heads
       + `<p class="muted">Research tool, not financial advice. Do your own research before acting on any idea.</p></div>`;
   }

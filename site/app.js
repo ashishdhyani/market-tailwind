@@ -9,7 +9,7 @@
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set() };
   const secCache = {};
   let picksCtx = null;
-  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false };
+  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false, profitOnly: false, active: new Set(), hiddenLoss: 0 };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -25,6 +25,8 @@
     sectorData = E.deriveSectorData(d, (t) => series[t] || etfSeries[t]);   // Sectors view = last ~year of the same prices
     for (const t of Object.keys(d.prices)) d.prices[t] = true;                // raw JSON arrays are no longer needed; keep the key list
     state.groups = new Set(d.groups.map((g) => g.name));
+    state.profitOnly = lsGet("mt_profit_only") === true;
+    $("profit-only").checked = state.profitOnly;
     applyGroups();
     state.ticker = d.watchlist.includes("AAPL") ? "AAPL" : d.watchlist[0];
     loadHoldings();
@@ -45,6 +47,11 @@
   // The universe is whole sector groups (11 US sectors + Singapore), not 500 individual buttons.
   function applyGroups() {
     state.universe = new Set(data.groups.filter((g) => state.groups.has(g.name)).flatMap((g) => g.tickers));
+    // Optional: hide companies that report a loss (negative ROE or net margin). Uses today's financials, so it is
+    // NOT applied to the backtest (that would be look-ahead bias); the backtest always uses state.universe.
+    const lossy = state.profitOnly ? [...state.universe].filter((t) => F.isLossMaking(infoOf(t))) : [];
+    state.active = new Set([...state.universe].filter((t) => !lossy.includes(t)));
+    state.hiddenLoss = lossy.length;
   }
   function buildChips() {
     $("chips").innerHTML = data.groups
@@ -79,6 +86,13 @@
       render();
     };
     $("rank-more").onclick = () => { state.rankAll = !state.rankAll; renderRank(); };
+    $("profit-only").onchange = (e) => {
+      state.profitOnly = e.target.checked;
+      lsSet("mt_profit_only", state.profitOnly);
+      applyGroups();
+      state.rankAll = false;
+      render();
+    };
     $("uni-all").onclick = () => setAll(true);
     $("uni-none").onclick = () => setAll(false);
     $("topn").oninput = (e) => { state.topN = +e.target.value; render(); };
@@ -114,8 +128,9 @@
   }
 
   // The universe in watchlist order, with its per-ticker arrays.
-  function universe() {
-    const tickers = data.watchlist.filter((t) => state.universe.has(t));
+  function universe(forBacktest) {
+    const set = forBacktest ? state.universe : state.active;
+    const tickers = data.watchlist.filter((t) => set.has(t));
     return { tickers, prices: tickers.map((t) => series[t]), feats: tickers.map((t) => feats[t]) };
   }
 
@@ -124,8 +139,8 @@
   function render() {
     $("topn-val").textContent = state.topN;
     $("cost-val").textContent = state.cost;
-    $("uni-count").textContent = `${state.universe.size} of ${data.watchlist.length} stocks`;
-    $("ctl-summary").textContent = `top ${state.topN} · ${state.cost} bps · ${state.universe.size} stocks`;
+    $("uni-count").textContent = `${state.active.size} of ${data.watchlist.length} stocks` + (state.hiddenLoss ? ` (hiding ${state.hiddenLoss} that report a loss)` : "");
+    $("ctl-summary").textContent = `top ${state.topN} · ${state.cost} bps · ${state.active.size} stocks` + (state.profitOnly ? " · no loss-makers" : "");
     const hz = E.HORIZONS[state.horizon];
     document.querySelectorAll("#horizons button").forEach((b) => b.setAttribute("aria-checked", b.dataset.h === state.horizon));
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
@@ -134,7 +149,7 @@
     for (const t of ["rank", "sectors", "news", "hold", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
-    const tooFew = state.universe.size < 6 && ["rank", "chart", "bt"].includes(state.tab);
+    const tooFew = (state.tab === "bt" ? state.universe.size : state.active.size) < 6 && ["rank", "chart", "bt"].includes(state.tab);
     $("warn").hidden = !tooFew;
     if (tooFew) {
       $("warn").textContent = "Select at least 6 stocks.";
@@ -161,11 +176,22 @@
     const s = n.replace(/^State Street /, "").replace(/,? (Inc\.?|Corporation|Corp\.?|Company|Co\.?|Ltd\.?|Limited|PLC|plc|N\.V\.|S\.A\.|Holdings?( Ltd\.?| Corporation)?|Group( Holdings?)?|Incorporated)\b\.?/g, "").replace(/\s+/g, " ").trim();
     return s.length > 32 ? s.slice(0, 31) + "…" : s;
   }
+  // ⚠ next to a stock that reports a loss (negative ROE or net margin), with the numbers on hover / tap.
+  const lossFlag = (t) => { const l = F.lossInfo(infoOf(t)); return l ? ` <span class="flag" title="${esc(l.text)}">⚠</span>` : ""; };
+  const lossLine = (t) => { const l = F.lossInfo(infoOf(t)); return l ? `<span class="flag-line">⚠ ${esc(l.text)}</span>` : ""; };
   const nameTag = (t) => { const n = shortName(t); return n ? `<small class="nm">${esc(n)}</small>` : ""; };
 
-  function sectorResult() {  // memoised per horizon; null when sector data is missing
+  // The loss-filtered view of the sector data (cached); `raw` (holdings) always sees every stock.
+  let sectorDataProfit = null;
+  function sectorDataFor(raw) {
+    if (raw || !state.profitOnly) return sectorData;
+    return (sectorDataProfit ??= { ...sectorData, sectors: Object.fromEntries(Object.entries(sectorData.sectors).map(([k, v]) =>
+      [k, { etf: v.etf, stocks: v.stocks.filter((t) => !F.isLossMaking(infoOf(t))) }])) });
+  }
+  function sectorResult(raw) {  // memoised per horizon and filter; null when sector data is missing
     if (!sectorData) return null;
-    return (secCache[state.horizon] ??= E.sectorAnalysis(sectorData, newsData, state.horizon));
+    const key = `${state.horizon}|${raw ? "raw" : state.profitOnly ? "profit" : "all"}`;
+    return (secCache[key] ??= E.sectorAnalysis(sectorDataFor(raw), newsData, state.horizon));
   }
 
   function tickerNews(t, z) {
@@ -176,8 +202,8 @@
     return { n: st.n, avg: st.avg, z, items: st.items };
   }
 
-  function sectorContext(t) {
-    const res = sectorResult();
+  function sectorContext(t, raw) {
+    const res = sectorResult(raw);
     if (!res) return { res: null };
     for (const s of res.sectors) {
       const k = s.stocks.findIndex((r) => r.ticker === t);
@@ -247,7 +273,7 @@
       return `<li><details class="stock" data-t="${esc(r.ticker)}" ${openRows.picks.has(r.ticker) ? "open" : ""}><summary>`
         + `<span class="st-head"><b>${r.rank}. ${esc(r.ticker)}</b>${nameTag(r.ticker)}</span>`
         + `<span class="why">${esc(E.explain(r, state.horizon))}</span>`
-        + (brief ? `<span class="brief">${esc(brief)}</span>` : "") + `<span class="more">Tap for details</span></summary>`
+        + (brief ? `<span class="brief">${esc(brief)}</span>` : "") + lossLine(r.ticker) + `<span class="more">Tap for details</span></summary>`
         + `<div class="detail">${openRows.picks.has(r.ticker) ? detailFor(r.ticker, "rank", r, { n: r.rank, of: total }) : ""}</div></details></li>`;
     }).join("");
     picksCtx = { byTicker, total };
@@ -258,7 +284,7 @@
     const shown = state.rankAll ? res.rows : res.rows.slice(0, 50);
     $("rank-more").hidden = res.rows.length <= 50;
     $("rank-more").textContent = state.rankAll ? "Show only the top 50" : `Show all ${res.rows.length} stocks`;
-    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
+    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${lossFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
       + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
       + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     const table = $("rank-table");
@@ -282,7 +308,8 @@
 
   function renderChart() {
     const sel = $("ticker");
-    const gsel = data.groups.filter((g) => state.groups.has(g.name));
+    const gsel = data.groups.filter((g) => state.groups.has(g.name))
+      .map((g) => ({ ...g, tickers: g.tickers.filter((t) => state.active.has(t)) })).filter((g) => g.tickers.length);
     const opts = gsel.flatMap((g) => g.tickers);
     if (!opts.includes(state.ticker)) state.ticker = opts[0];
     sel.innerHTML = gsel.map((g) => `<optgroup label="${esc(g.name)}">${g.tickers.map((t) =>
@@ -303,7 +330,7 @@
   }
 
   function renderBacktest() {
-    const u = universe();
+    const u = universe(true);   // the loss-making filter never applies to the backtest (look-ahead bias)
     const key = [...u.tickers, state.topN, state.cost, state.horizon].join("|");
     if (!btCache || btCache.key !== key) {
       btCache = { key, res: E.runBacktest(dates, u.prices, u.feats, benchSeries, state.topN, state.cost, 1, state.horizon) };
@@ -311,7 +338,8 @@
     const res = btCache.res;
     const hz = E.HORIZONS[state.horizon];
     const cadence = { month: "monthly", "2week": "every 2 weeks", week: "weekly" }[hz.rebalance];
-    $("bt-desc").textContent = `Picks ranked by ${hz.blurb}, rebalanced ${cadence}.`;
+    $("bt-desc").textContent = `Picks ranked by ${hz.blurb}, rebalanced ${cadence}.`
+      + (state.profitOnly ? " The “hide companies that report a loss” switch does not apply here: it uses today's financials, and applying them to the past would be look-ahead bias." : "");
     const traces = Object.entries(res.equity).map(([name, eq]) => ({
       x: res.dates, y: Array.from(eq), name, type: "scatter", mode: "lines", line: { width: 2 },
     }));
@@ -359,7 +387,7 @@
       $("sector-list").innerHTML = '<p class="notice">Sector data is not available yet. It is created by the daily refresh job.</p>';
       return;
     }
-    const res = E.sectorAnalysis(sectorData, newsData, state.horizon);
+    const res = sectorResult();   // honours the 'hide companies that report a loss' switch
     const rk = horizonRetKey(), rl = horizonRetLabel();
     $("sector-note").textContent = res.hasNews
       ? `Ranked by ${E.HORIZONS[state.horizon].blurb} of the sector ETF (70%) and news tone over the last 7 days (30%). Prices as of ${res.asOf}.`
@@ -371,12 +399,12 @@
     $("sector-hero").innerHTML = `<div class="hero"><div class="kicker">Strongest sector right now</div>`
       + `<h2>${esc(top.name)}</h2><p>${esc(why)}.</p>`
       + `<div class="ideas"><span class="idea">${esc(top.etf)}<small>${esc(shortName(top.etf))}</small><small>ETF</small></span>`
-      + picks.map((r) => `<span class="idea">${esc(r.ticker)}<small>${esc(shortName(r.ticker))}</small><small class="${cls(r[rk])}">${retTxt(r[rk])}</small></span>`).join("") + `</div>`
+      + picks.map((r) => `<span class="idea">${esc(r.ticker)}${lossFlag(r.ticker)}<small>${esc(shortName(r.ticker))}</small><small class="${cls(r[rk])}">${retTxt(r[rk])}</small></span>`).join("") + `</div>`
       + `<p class="note">Tap a stock below to see why it is suggested and its key numbers.</p></div>`;
 
     $("sector-list").innerHTML = res.sectors.map((s) => {
       const fpe = (t) => { const v = infoOf(t)?.fwd_pe; return v > 0 ? v.toFixed(1) : "–"; };
-      const rows = s.stocks.map((r, i) => `<tr ${rowAttrs(r.ticker, i >= 10)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${i < 3 ? '<span class="tag sug">suggested</span>' : ""}${nameTag(r.ticker)}</td><td>${num(r.price)}</td>`
+      const rows = s.stocks.map((r, i) => `<tr ${rowAttrs(r.ticker, i >= 10)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${lossFlag(r.ticker)}${i < 3 ? '<span class="tag sug">suggested</span>' : ""}${nameTag(r.ticker)}</td><td>${num(r.price)}</td>`
         + `<td class="${cls(r.ret_5)}">${retTxt(r.ret_5)}</td><td class="${cls(r.ret_21)}">${retTxt(r.ret_21)}</td><td>${fpe(r.ticker)}</td>`
         + `<td>${esc(r.trend_label)}</td><td>${res.hasNews ? esc(toneWord(r.newsZ)) : "n/a"}</td><td>${num(r.final)}</td></tr>`).join("");
       const e = s.etfRow;
@@ -441,7 +469,7 @@
 
   function signalFor(h) {
     const t = h.t, info = infoOf(t), src = priceSource(t), row = src ? rowFromSource(src) : null;
-    const sc = sectorContext(t), wr = watchlistRanks(), wrow = wr.map.get(t) || null;
+    const sc = sectorContext(t, true), wr = watchlistRanks(), wrow = wr.map.get(t) || null;
     const z = sc.stock ? sc.stock.newsZ : sc.s && sc.s.etf === t ? sc.s.newsZ : null;
     const news = tickerNews(t, z);
     const ev = info && row ? F.evaluate(info, row.price) : null;
@@ -547,7 +575,7 @@
         const r = x.row, h = x.h, val = h.qty ? h.qty * r.price : null, w = weightOf.get(x.t);
         const pl = h.cost ? r.price / h.cost - 1 : null;
         const rank = x.rank ? `#${x.rank.n}/${x.rank.of}` : x.sc.stock ? `#${x.sc.k} in ${esc(x.sc.sector.name)}` : "–";
-        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
+        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${lossFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
           + `<td>${val ? esc(money(val, x.currency)) : "–"}</td><td>${w != null ? (w * 100).toFixed(0) + "%" : "–"}</td>${pc(pl)}<td>${esc(r.trend_label)}</td>${pc(r.ret_5)}${pc(r.ret_21)}`
           + `<td>${x.newsWord ? esc(x.newsWord) : "–"}</td><td>${x.fund ? esc(x.fund) : x.info?.type === "ETF" ? "ETF" : "–"}</td><td>${rank}</td></tr>`;
       }).join("");

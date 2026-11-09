@@ -146,6 +146,18 @@
       info.rev_growth != null ? `Rev ${spc(info.rev_growth, 0)}` : null].filter(Boolean).join(" · ");
   }
 
+  /* "Reports a loss": negative ROE or net profit margin. The ranking looks at price only, so these companies can
+     rank high on momentum alone; the app flags them and offers a switch to hide them. (A one-off write-down can
+     also cause it, so the wording says "reports", not "is unprofitable".) ETFs and companies without data: null. */
+  function lossInfo(info) {
+    if (!info || info.type === "ETF") return null;
+    const parts = [];
+    if (info.roe != null && info.roe < 0) parts.push(`ROE ${pc(info.roe, 0)}`);
+    if (info.net_margin != null && info.net_margin < 0) parts.push(`net margin ${pc(info.net_margin, 0)}`);
+    return parts.length ? { text: `Reports a loss: ${parts.join(", ")}`, short: "Reports a loss" } : null;
+  }
+  const isLossMaking = (info) => lossInfo(info) !== null;
+
   const GURUS = [
     { who: "Benjamin Graham", idea: "Buy with a margin of safety: modest P/E and price-to-book, low debt, steady dividends.", metrics: "Forward P/E, Price/book, Debt/equity" },
     { who: "Warren Buffett", idea: "Wonderful businesses at fair prices: high, steady returns on equity, strong margins, little debt, plenty of real cash.", metrics: "ROE, Net margin, Debt/equity, Free-cash-flow yield" },
@@ -153,7 +165,7 @@
     { who: "Joel Greenblatt", idea: "Good and cheap: high returns on capital bought at a high earnings/cash yield.", metrics: "Free-cash-flow yield, EV/EBITDA, ROE" },
   ];
 
-  const api = { CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
+  const api = { lossInfo, isLossMaking, CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Fundamentals = api;
 })(typeof self !== "undefined" ? self : this);

@@ -237,3 +237,11 @@ tr.extra, tr.detail-row.extra { display: none; }
 .show-all tr.extra { display: table-row; }
 .chip small { opacity: .65; margin-left: 2px; }
 #rank-more { margin: 8px 0 0; padding-left: 0; font-weight: 600; }
+
+/* ---- loss warnings and the "hide loss-makers" switch ---- */
+.flag { color: var(--neg); cursor: help; font-size: .85em; }
+.flag-line { display: block; margin-top: 4px; font-size: .8rem; font-weight: 600; color: var(--neg); }
+.warn-banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 8px 12px; margin: 0 0 8px; font-size: .86rem; line-height: 1.4; }
+.switch { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; font-size: .92rem; cursor: pointer; }
+.switch input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: none; }
+.switch small { display: block; color: var(--muted); font-size: .76rem; margin-top: 2px; }

@@ -24,6 +24,16 @@ for (const h of Object.keys(E.HORIZONS)) {
   }
 }
 
+// Loss warning banner: shown for a company that reports a loss, never for a profitable one or an ETF
+const lossHtml = D.buildDetail({ ticker: "L", info: { name: "Loss Co", type: "EQUITY", sector: "Health Care", roe: -0.345, net_margin: -1.1, fwd_pe: -50 }, price: 10, row: null, horizon: "long", mode: "rank", news: null });
+ok(/class="warn-banner"/.test(lossHtml) && /Reports a loss: ROE -35%, net margin -110%/.test(lossHtml), "loss banner");
+const okHtml = D.buildDetail({ ticker: "P", info: { name: "Profit Co", type: "EQUITY", sector: "Energy", roe: 0.2, net_margin: 0.1, fwd_pe: 12 }, price: 10, row: null, horizon: "long", mode: "rank", news: null });
+ok(!/warn-banner/.test(okHtml), "no banner for a profitable company");
+const etfHtml = D.buildDetail({ ticker: "E", info: { name: "Some ETF", type: "ETF", roe: -1 }, price: 10, row: null, horizon: "long", mode: "rank", news: null });
+ok(!/warn-banner/.test(etfHtml), "no banner for an ETF");
+const hold = D.buildDetail({ ticker: "L", info: { name: "Loss Co", type: "EQUITY", roe: -0.1 }, price: 10, row: null, horizon: "long", mode: "holding", news: null });
+ok(/warn-banner/.test(hold), "banner also in the holdings view");
+
 // Untrusted text is escaped; non-http links are neutralised
 const evil = D.buildDetail({ ticker: "X", info: { name: '<img src=x onerror=alert(1)>', type: "EQUITY", sector: "Energy", fwd_pe: 10 }, price: 10, row: null, horizon: "long", mode: "rank",
   news: { n: 1, avg: 0.5, z: null, items: [{ title: '<script>alert(1)</script>', url: "javascript:alert(1)", time: new Date().toISOString(), score: 0.5, tickers: ["X"] }] } });
