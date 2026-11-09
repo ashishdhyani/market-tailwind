@@ -12,7 +12,7 @@ Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM 
 - **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_protect.mjs`)
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_protect.mjs`)
 
 ## Python / Streamlit version (original)
 
@@ -41,6 +41,10 @@ streamlit run app.py      # open the dashboard
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
+
+## Pullbacks (a screen, not a forecast)
+
+The Pullbacks tab lists stocks that fell by at least X% over a chosen window (1 week to 3 months) and ranks them by how much supporting evidence they have, with the evidence for and against on each card: news tone, profitability, analyst target and rating, expected earnings (forward vs trailing P/E), sales growth, valuation, and whether the 6-month trend is still up. A very sharp fall counts as a caution, because analyst targets lag the price. ETFs are excluded (no company financials). It is the same for everyone and cannot be backtested (we only have today's analyst and financial data); a falling stock is often falling for a good reason. Logic and tests: `site/pullbacks.js`, `tests/test_pullbacks.js`.
 
 ## Cash planner (a calculator, not advice)
 

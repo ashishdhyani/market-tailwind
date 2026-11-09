@@ -262,3 +262,10 @@ tr.extra, tr.detail-row.extra { display: none; }
 .plan-total { margin: 10px 0 4px; font-size: .92rem; }
 .plan-h { font-size: .88rem; margin: 10px 0 4px; }
 .plan-facts { margin: 8px 0; padding-left: 18px; font-size: .86rem; }
+
+/* ---- pullbacks ---- */
+.pb-count { display: block; margin-top: 6px; font-size: .8rem; font-weight: 700; color: var(--accent); }
+.pb-s, .pb-c { display: block; font-size: .8rem; margin-top: 2px; line-height: 1.35; }
+.pb-s { color: var(--pos); } .pb-c { color: var(--neg); }
+.pb-ev { margin: 0 0 6px; padding-left: 18px; font-size: .88rem; } .pb-ev li { margin: 3px 0; }
+.pb-ev.for li::marker { color: var(--pos); } .pb-ev.against li::marker { color: var(--neg); }

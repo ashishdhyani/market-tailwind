@@ -1,15 +1,15 @@
 "use strict";
 (function () {
-  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings;
+  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null, groupOf = {};
-  const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set() };
+  const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set(), pb: new Set() };
   const secCache = {};
   let picksCtx = null;
-  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false, profitOnly: false, active: new Set(), hiddenLoss: 0 };
+  const state = { universe: new Set(), groups: new Set(), topN: 5, cost: 10, tab: "rank", ticker: null, horizon: "long", newsSector: null, rankAll: false, pbWindow: "1m", pbDrop: 10, profitOnly: false, active: new Set(), hiddenLoss: 0 };
   let btCache = null;
 
   const toArray = (a) => Float64Array.from(a, (v) => (v === null ? NaN : v));
@@ -39,6 +39,7 @@
     bindControls();
     bindHoldings();
     bindPlan();
+    bindPullbacks();
     $("status").hidden = true;
     $("app").hidden = false;
     render();
@@ -148,10 +149,10 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "sectors", "news", "hold", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "news", "pull", "hold", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
-    const tooFew = (state.tab === "bt" ? state.universe.size : state.active.size) < 6 && ["rank", "chart", "bt"].includes(state.tab);
+    const tooFew = (state.tab === "bt" ? state.universe.size : state.active.size) < 6 && ["rank", "chart", "bt", "pull"].includes(state.tab);
     $("warn").hidden = !tooFew;
     if (tooFew) {
       $("warn").textContent = "Select at least 6 stocks.";
@@ -161,6 +162,7 @@
     if (state.tab === "sectors") renderSectors();
     if (state.tab === "news") renderNews();
     if (state.tab === "hold") renderHoldings();
+    if (state.tab === "pull") renderPullbacks();
     if (state.tab === "rank") renderRank();
     if (state.tab === "chart") renderChart();
     if (state.tab === "bt") renderBacktest();
@@ -486,7 +488,7 @@
   }
 
   function holdingDetail(t) {
-    const s = signalFor(holdings.find((h) => h.t === t));
+    const s = signalFor({ t });   // any ticker: used by Holdings and Pullbacks
     const row = s.row ? (s.wrow ? { ...s.row, score: s.wrow.score } : s.row) : null;
     return D.buildDetail({ ticker: t, info: s.info, price: row ? row.price : null, row, horizon: state.horizon, mode: "holding",
       rank: s.wrow ? s.rank : undefined, sector: s.sc.sector, news: s.news, now: Date.now() });
@@ -600,6 +602,63 @@
       $("plan-reserve").value = 0; $("plan-fee").value = 0; $("plan-frac").checked = false; $("plan-cur").value = "USD";
       $("plan-out").innerHTML = ""; $("plan-msg").textContent = "Cleared.";
     };
+  }
+
+  /* ---------- pullbacks: a screen, the same for everyone ---------- */
+
+  function renderPullbacks() {
+    const w = P.WINDOWS[state.pbWindow], drop = state.pbDrop / 100;
+    const cands = [];
+    for (const t of data.watchlist) {
+      if (!state.active.has(t)) continue;
+      const info = infoOf(t);
+      if (!info || info.type === "ETF") continue;
+      const src = priceSource(t), row = src ? rowFromSource(src) : null;
+      if (row && Number.isFinite(row[w.key]) && row[w.key] <= -drop) cands.push({ t, row, info, news: null });
+    }
+    for (const c of cands) {          // news only for the ones that fell (cheaper)
+      const sc = sectorContext(c.t, true);
+      const nw = tickerNews(c.t, sc.stock ? sc.stock.newsZ : null);
+      c.news = nw && nw.n ? nw : null;
+      c.headlines = nw ? nw.items.slice(0, 2) : [];
+    }
+    const res = P.screen(cands, { window: state.pbWindow, minDrop: drop, limit: 25 });
+    $("pb-summary").textContent = res.total
+      ? `${res.total} of the ${[...state.active].filter((t) => infoOf(t) && infoOf(t).type !== "ETF").length} stocks in your universe fell at least ${state.pbDrop}% over ${w.label}. Showing the ${res.shown.length} with the most supporting evidence (net of the cautions).`
+      : `No stocks in your universe fell at least ${state.pbDrop}% over ${w.label}. Try a smaller fall or a longer window.`;
+    $("pb-list").innerHTML = res.shown.map((r, i) => {
+      const x = r.row, tr = (v) => (Number.isFinite(v) ? E.pct(v, 1, true) : "n/a");
+      const sup = r.supports.slice(0, 3).map((q) => `<span class="pb-s">✓ ${esc(q.text)}</span>`).join("");
+      const cau = r.cautions.map((q) => `<span class="pb-c">⚠ ${esc(q.text)}</span>`).join("");
+      return `<li><details class="stock" data-t="${esc(r.t)}" ${openRows.pb.has(r.t) ? "open" : ""}><summary>`
+        + `<span class="st-head"><b>${i + 1}. ${esc(r.t)}</b>${lossFlag(r.t)}${nameTag(r.t)}</span>`
+        + `<span class="why">Fell <b class="neg">${E.pct(r.drop, 1)}</b> over ${esc(w.label)} (1w ${tr(x.ret_5)}, 1m ${tr(x.ret_21)}, 3m ${tr(x.ret_63)}, 6m ${tr(x.ret_126)}); ${esc(x.trend_label || "")}</span>`
+        + `<span class="pb-count">${r.supports.length} supporting · ${r.cautions.length} caution${r.cautions.length === 1 ? "" : "s"}</span>${sup}${cau}`
+        + `<span class="more">Tap for all the evidence</span></summary><div class="detail"></div></details></li>`;
+    }).join("");
+    pbCtx = new Map(res.shown.map((r) => [r.t, r]));
+    for (const t of openRows.pb) { const d = document.querySelector(`#pb-list details[data-t="${t}"] .detail`); if (d && pbCtx.has(t)) d.innerHTML = pullbackDetail(t); }
+  }
+  let pbCtx = null;
+
+  function pullbackDetail(t) {
+    const r = pbCtx.get(t);
+    const list = (items, cls, mark) => (items.length ? `<ul class="pb-ev ${cls}">${items.map((q) => `<li>${mark} ${esc(q.text)}</li>`).join("")}</ul>` : "");
+    const heads = r.headlines && r.headlines.length
+      ? `<h4>Latest headlines (may explain the fall)</h4><ul class="news">${r.headlines.map((it) => `<li><span class="dot ${it.score > 0.15 ? "up" : it.score < -0.15 ? "down" : ""}"></span><span><a href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a><time>${esc(ago(it.time))}</time></span></li>`).join("")}</ul>` : "";
+    return `<div class="detail-inner"><h4>Evidence for</h4>${list(r.supports, "for", "✓") || '<p class="muted">None of the supporting signs apply.</p>'}`
+      + `<h4>Evidence against</h4>${list(r.cautions, "against", "⚠") || '<p class="muted">No cautions found in the data we have.</p>'}${heads}</div>` + holdingDetail(t);
+  }
+
+  function bindPullbacks() {
+    $("pb-window").onchange = (e) => { state.pbWindow = e.target.value; renderPullbacks(); };
+    $("pb-drop").onchange = (e) => { const v = Math.min(60, Math.max(3, parseFloat(e.target.value) || 10)); state.pbDrop = v; e.target.value = v; renderPullbacks(); };
+    $("pb-list").addEventListener("toggle", (e) => {
+      const det = e.target;
+      if (!pbCtx || !det.matches?.("details.stock")) return;
+      const t = det.dataset.t, box = det.querySelector(".detail");
+      if (det.open) { openRows.pb.add(t); if (pbCtx.has(t) && !box.firstChild) box.innerHTML = pullbackDetail(t); } else openRows.pb.delete(t);
+    }, true);
   }
 
   function renderHoldings() {
