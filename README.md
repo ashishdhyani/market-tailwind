@@ -48,7 +48,7 @@ Backtests here are flattered by survivorship bias, so the Scoreboard keeps a rec
 
 ## Event risk: earnings and ex-dividend dates
 
-Company data now includes each stock's next earnings and ex-dividend dates (from Yahoo, refreshed daily; `next_earnings` / `ex_div` in `fundamentals.json`). A 📅 marker appears next to any stock reporting within two weeks (Rankings, Pullbacks, Holdings, the planner), the detail panel has a "Coming up" line, Holdings lists upcoming events for what you own, and the planner warns about earnings inside a week. Earnings dates are often expected dates that can shift, so the app says "around"; a missing date means Yahoo has none yet, not that nothing is coming. Past dates are ignored, so a stale file never shows an old event. Tests: `tests/test_fundamentals.*`, `tests/test_detail.js`.
+Company data now includes each stock's next earnings and ex-dividend dates (from Yahoo, refreshed daily; `next_earnings` / `ex_div` in `fundamentals.json`). A 📅 marker appears next to any stock reporting within two weeks (Rankings, Pullbacks, Holdings, the planner), the detail panel has a "Coming up" line, Holdings lists upcoming events for what you own and has a permanent **Next earnings** column (a date, "–" for unknown, "n/a" for funds), and the planner warns about earnings inside a week. Earnings dates are often expected dates that can shift, so the app says "around"; a missing date means Yahoo has none yet, not that nothing is coming. Past dates are ignored, so a stale file never shows an old event. Tests: `tests/test_fundamentals.*`, `tests/test_detail.js`.
 
 ## Portfolio risk check
 

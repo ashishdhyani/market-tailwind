@@ -281,3 +281,9 @@ tr.extra, tr.detail-row.extra { display: none; }
 /* ---- scoreboard: let the long list names wrap so the numbers stay on screen ---- */
 #sb-tables td:first-child, #sb-tables th:first-child { white-space: normal; min-width: 128px; max-width: 150px; font-size: .8rem; }
 #sb-tables td, #sb-tables th { padding: 8px 6px; }
+
+/* ---- earnings column in Holdings ---- */
+td.earn { white-space: nowrap; font-size: .82rem; }
+td.earn.none { color: var(--muted); }
+td.earn.near { color: #d99a00; font-weight: 600; }
+td.earn.soon { color: var(--neg); font-weight: 700; }

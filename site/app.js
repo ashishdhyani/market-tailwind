@@ -187,6 +187,8 @@
   // 📅 when earnings are within two weeks: a big move either way is likely. Dates come from Yahoo and can shift.
   const evFlag = (t) => { const f = F.eventFlag(infoOf(t)); return f ? ` <span class="ev ${f.level}" title="${esc(f.text)}">📅</span>` : ""; };
   const evLine = (t) => { const f = F.eventFlag(infoOf(t)); return f ? `<span class="ev-line">📅 ${esc(f.short)}: ${esc(f.text.split(": ")[1])}</span>` : ""; };
+  // Holdings table cell: next earnings date (or why there is none). Amber within two weeks, red within three days.
+  const earnCell = (info) => { const c = F.earningsCell(info); return `<td class="earn ${c.level}" title="${esc(c.title)}">${esc(c.label)}</td>`; };
   const etfTag = (t) => (infoOf(t)?.type === "ETF" ? ' <span class="tag">ETF</span>' : "");
   const nameTag = (t) => { const n = shortName(t); return n ? `<small class="nm">${esc(n)}</small>` : ""; };
 
@@ -841,14 +843,15 @@
     // --- table
     const wrap = $("hold-table-wrap");
     wrap.hidden = !covered.length;
+    $("hold-legend").hidden = !covered.length;
     if (covered.length) {
-      const head = ["Stock", "Shares", "Value", "Weight", "P/L", "Trend", "1 week", "1 month", "News", "Fundamentals", "Rank"];
+      const head = ["Stock", "Next earnings", "Shares", "Value", "Weight", "P/L", "Trend", "1 week", "1 month", "News", "Fundamentals", "Rank"];
       const pc = (v) => (Number.isFinite(v) ? `<td class="${cls(v)}">${E.pct(v, 1, true)}</td>` : "<td>–</td>");
       const rows = covered.map((x) => {
         const r = x.row, h = x.h, val = h.qty ? h.qty * r.price : null, w = weightOf.get(x.t);
         const pl = h.cost ? r.price / h.cost - 1 : null;
         const rank = x.rank ? `#${x.rank.n}/${x.rank.of}` : x.sc.stock ? `#${x.sc.k} in ${esc(x.sc.sector.name)}` : "–";
-        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${etfTag(x.t)}${lossFlag(x.t)}${evFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
+        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${etfTag(x.t)}${lossFlag(x.t)}${evFlag(x.t)}${nameTag(x.t)}</td>${earnCell(x.info)}<td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
           + `<td>${val ? esc(money(val, x.currency)) : "–"}</td><td>${w != null ? (w * 100).toFixed(0) + "%" : "–"}</td>${pc(pl)}<td>${esc(r.trend_label)}</td>${pc(r.ret_5)}${pc(r.ret_21)}`
           + `<td>${x.newsWord ? esc(x.newsWord) : "–"}</td><td>${x.fund ? esc(x.fund) : x.info?.type === "ETF" ? "ETF" : "–"}</td><td>${rank}</td></tr>`;
       }).join("");

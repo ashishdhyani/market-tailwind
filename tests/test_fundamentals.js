@@ -64,6 +64,16 @@ ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-12-20" }, NOW) === null &&
 ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-12-05" }, NOW, 30).days === 26, "custom window");
 ok(!/\b(you should|buy|sell)\b/i.test(F.eventFlag({ type: "EQUITY", next_earnings: "2026-11-11" }, NOW).text), "flag text is informational");
 
+// ---- earnings cell for the Holdings table ----
+let ec = F.earningsCell({ type: "EQUITY", next_earnings: "2026-11-17" }, NOW);
+ok(ec.label === "17 Nov · in 8d" && ec.days === 8 && ec.level === "near" && /Earnings around 17 Nov/.test(ec.title), "cell near: " + JSON.stringify(ec));
+ok(F.earningsCell({ type: "EQUITY", next_earnings: "2026-11-09" }, NOW).label === "9 Nov · today" && F.earningsCell({ type: "EQUITY", next_earnings: "2026-11-09" }, NOW).level === "soon", "cell today");
+ok(F.earningsCell({ type: "EQUITY", next_earnings: "2026-11-10" }, NOW).label === "10 Nov · tomorrow", "cell tomorrow");
+ok(F.earningsCell({ type: "EQUITY", next_earnings: "2027-01-28" }, NOW).label === "28 Jan 2027 · in 80d" && F.earningsCell({ type: "EQUITY", next_earnings: "2027-01-28" }, NOW).level === "later", "cell far away shows the year");
+ok(F.earningsCell({ type: "EQUITY" }, NOW).label === "–" && /unknown/.test(F.earningsCell({ type: "EQUITY" }, NOW).title), "cell unknown says unknown, not none");
+ok(F.earningsCell({ type: "EQUITY", next_earnings: "2026-11-02" }, NOW).label === "–", "cell: a past date is unknown, never shown");
+ok(F.earningsCell({ type: "ETF" }, NOW).label === "n/a" && F.earningsCell(undefined, NOW).label === "–", "cell: ETF / no data");
+
 // every real ticker evaluates without throwing
 const fd = require("../site/fundamentals.json").items;
 let n = 0; for (const [t, i] of Object.entries(fd)) { try { F.evaluate(i, i.hi52 ? (i.hi52 + i.lo52) / 2 : 10); n++; } catch (x) { bad++; console.log("THROW", t, x.message); } }

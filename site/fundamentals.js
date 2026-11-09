@@ -184,6 +184,17 @@
     return out;
   }
 
+  /* For a table cell: { label: "17 Nov · in 8d", days, level, title } when a date is known; { label: "n/a" } for funds;
+     { label: "–", title } when Yahoo has no upcoming date yet (unknown, not "nothing coming"). */
+  function earningsCell(info, nowMs = Date.now()) {
+    if (!info) return { label: "–", level: "none", title: "No company data for this ticker" };
+    if (info.type === "ETF") return { label: "n/a", level: "none", title: "Funds do not report earnings" };
+    const e = events(info, nowMs).earnings;
+    if (!e) return { label: "–", level: "none", title: "No upcoming earnings date announced yet (unknown, not 'none')" };
+    const short = e.days === 0 ? "today" : e.days === 1 ? "tomorrow" : `in ${e.days}d`;
+    return { label: `${fmtDate(e.date, nowMs)} · ${short}`, days: e.days, level: e.days <= 3 ? "soon" : e.days <= 14 ? "near" : "later", title: e.text };
+  }
+
   /* A warning when earnings are close: a big move either way is likely. Null when far away or unknown. */
   function eventFlag(info, nowMs = Date.now(), within = 14) {
     const e = events(info, nowMs).earnings;
@@ -198,7 +209,7 @@
     { who: "Joel Greenblatt", idea: "Good and cheap: high returns on capital bought at a high earnings/cash yield.", metrics: "Free-cash-flow yield, EV/EBITDA, ROE" },
   ];
 
-  const api = { events, eventFlag, lossInfo, isLossMaking, CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
+  const api = { earningsCell, events, eventFlag, lossInfo, isLossMaking, CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Fundamentals = api;
 })(typeof self !== "undefined" ? self : this);
