@@ -34,6 +34,15 @@ ok(!/warn-banner/.test(etfHtml), "no banner for an ETF");
 const hold = D.buildDetail({ ticker: "L", info: { name: "Loss Co", type: "EQUITY", roe: -0.1 }, price: 10, row: null, horizon: "long", mode: "holding", news: null });
 ok(/warn-banner/.test(hold), "banner also in the holdings view");
 
+// "Coming up" line: only for upcoming dates, with a caution when earnings are close
+const NOW2 = Date.UTC(2026, 10, 9, 15, 0);
+const evHtml = D.buildDetail({ ticker: "E", info: { name: "Event Co", type: "EQUITY", next_earnings: "2026-11-12", ex_div: "2026-11-20" }, price: 10, row: null, horizon: "long", mode: "rank", news: null, now: NOW2 });
+ok(/Coming up:<\/b> Earnings around 12 Nov \(in 3 days\); Ex-dividend around 20 Nov \(in 11 days\)\. Results often move a stock sharply either way/.test(evHtml), "coming up line: " + (evHtml.match(/Coming up:.{0,160}/) || [""])[0]);
+const farHtml = D.buildDetail({ ticker: "E", info: { name: "Event Co", type: "EQUITY", next_earnings: "2027-01-28" }, price: 10, row: null, horizon: "long", mode: "rank", news: null, now: NOW2 });
+ok(/Coming up:/.test(farHtml) && !/sharply either way/.test(farHtml), "far-away earnings: listed without the caution");
+const pastHtml = D.buildDetail({ ticker: "E", info: { name: "Event Co", type: "EQUITY", next_earnings: "2026-11-02" }, price: 10, row: null, horizon: "long", mode: "rank", news: null, now: NOW2 });
+ok(!/Coming up:/.test(pastHtml), "past dates produce no line");
+
 // Untrusted text is escaped; non-http links are neutralised
 const evil = D.buildDetail({ ticker: "X", info: { name: '<img src=x onerror=alert(1)>', type: "EQUITY", sector: "Energy", fwd_pe: 10 }, price: 10, row: null, horizon: "long", mode: "rank",
   news: { n: 1, avg: 0.5, z: null, items: [{ title: '<script>alert(1)</script>', url: "javascript:alert(1)", time: new Date().toISOString(), score: 0.5, tickers: ["X"] }] } });

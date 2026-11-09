@@ -48,6 +48,22 @@ ok(F.isLossMaking({ type: "EQUITY", roe: -1 }) && !F.isLossMaking({ type: "EQUIT
   ok(share > 0.005 && share < 0.15, "loss-maker share looks sane: " + share.toFixed(3));
 }
 
+// ---- upcoming events (fixed "now": 9 Nov 2026, 15:00 UTC) ----
+const NOW = Date.UTC(2026, 10, 9, 15, 0);
+let ev = F.events({ type: "EQUITY", next_earnings: "2026-11-17", ex_div: "2026-11-12" }, NOW);
+ok(ev.earnings.days === 8 && ev.earnings.text === "Earnings around 17 Nov (in 8 days)", "earnings text: " + ev.earnings.text);
+ok(ev.exDiv.days === 3 && ev.exDiv.text === "Ex-dividend around 12 Nov (in 3 days)", "ex-div text");
+ok(F.events({ type: "EQUITY", next_earnings: "2026-11-09" }, NOW).earnings.text === "Earnings around 9 Nov (today)", "today");
+ok(F.events({ type: "EQUITY", next_earnings: "2026-11-10" }, NOW).earnings.text === "Earnings around 10 Nov (tomorrow)", "tomorrow");
+ok(F.events({ type: "EQUITY", next_earnings: "2027-01-28" }, NOW).earnings.text === "Earnings around 28 Jan 2027 (in 80 days)", "next year shows the year");
+ok(F.events({ type: "EQUITY", next_earnings: "2026-11-02", ex_div: "2026-09-10" }, NOW).earnings === null && F.events({ type: "EQUITY", ex_div: "2026-09-10" }, NOW).exDiv === null, "past dates are ignored (a stale file never shows an old event)");
+ok(F.events({ type: "ETF", next_earnings: "2026-11-17" }, NOW).earnings === null && F.events(undefined, NOW).earnings === null && F.events({ type: "EQUITY", next_earnings: "garbage" }, NOW).earnings === null, "ETF / missing / invalid");
+ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-11-17" }, NOW).level === "near" && F.eventFlag({ type: "EQUITY", next_earnings: "2026-11-17" }, NOW).short === "Earnings in 8 days", "flag near");
+ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-11-11" }, NOW).level === "soon", "flag soon (within 3 days)");
+ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-12-20" }, NOW) === null && F.eventFlag({ type: "EQUITY" }, NOW) === null, "no flag when far away or unknown");
+ok(F.eventFlag({ type: "EQUITY", next_earnings: "2026-12-05" }, NOW, 30).days === 26, "custom window");
+ok(!/\b(you should|buy|sell)\b/i.test(F.eventFlag({ type: "EQUITY", next_earnings: "2026-11-11" }, NOW).text), "flag text is informational");
+
 // every real ticker evaluates without throwing
 const fd = require("../site/fundamentals.json").items;
 let n = 0; for (const [t, i] of Object.entries(fd)) { try { F.evaluate(i, i.hi52 ? (i.hi52 + i.lo52) / 2 : 10); n++; } catch (x) { bad++; console.log("THROW", t, x.message); } }

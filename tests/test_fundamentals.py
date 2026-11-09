@@ -27,6 +27,21 @@ assert f["category"] == "Equity Energy" and "fwd_pe" not in f
 # Empty / hostile input does not crash
 assert normalize({}) == {}
 assert normalize({"longName": "X", "forwardPE": "n/a", "marketCap": float("inf")}) == {"name": "X"}
+# event dates: the earliest date that has not passed; past dates (Yahoo often reports the LAST earnings) are ignored
+from datetime import date, datetime, timezone
+ts = lambda iso: int(datetime.fromisoformat(iso).replace(tzinfo=timezone.utc).timestamp())
+today = date(2026, 11, 9)
+ev = normalize({"longName": "X", "earningsTimestamp": ts("2026-11-02"), "earningsTimestampStart": ts("2027-01-28"),
+                "earningsTimestampEnd": ts("2027-01-30"), "exDividendDate": ts("2026-11-12")}, today)
+assert ev["next_earnings"] == "2027-01-28" and ev["ex_div"] == "2026-11-12", ev       # skips the 2 Nov report
+assert normalize({"longName": "X", "earningsTimestamp": ts("2026-11-17")}, today)["next_earnings"] == "2026-11-17"
+assert normalize({"longName": "X", "earningsTimestamp": ts("2026-11-09")}, today)["next_earnings"] == "2026-11-09"   # today counts
+assert "next_earnings" not in normalize({"longName": "X", "earningsTimestamp": ts("2026-11-05")}, today)           # all past: none
+assert "ex_div" not in normalize({"longName": "X", "exDividendDate": ts("2026-09-10")}, today)
+assert "next_earnings" not in normalize({"longName": "X", "earningsTimestamp": ts("2031-01-01")}, today)            # absurdly far: ignored
+assert "next_earnings" not in normalize({"longName": "X", "earningsTimestamp": "soon", "earningsTimestampStart": float("nan")}, today)
+assert "next_earnings" not in normalize({"longName": "X", "quoteType": "ETF"}, today)                                # funds have none
+
 # the daily refresh is skipped only when the file is recent AND already covers every ticker
 from fundamentals import should_skip
 have = {"AAPL": {}, "XOM": {}}

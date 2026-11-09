@@ -174,6 +174,11 @@
       </div>
     </details>
     <div id="hold-summary"></div>
+    <details class="editor" id="risk-box">
+      <summary>Portfolio risk check <small class="muted">(how it has behaved, not a forecast)</small></summary>
+      <div class="ed-body" id="hold-risk"><p class="note">Add holdings with share counts to see how they have swung together.</p></div>
+    </details>
+    <div id="hold-events"></div>
     <div id="hold-changes"></div>
     <div class="table-wrap" id="hold-table-wrap" hidden><table id="hold-table"></table></div>
     <div id="hold-uncovered"></div>
@@ -209,6 +214,8 @@
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
     <p><b>Important:</b> Market Tailwind is a research tool, not financial advice. The rankings, sector views and suggested stocks and ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and don't rely on them. See "Read the full disclaimer" at the top of the page.</p>
     <p><b>Companies that report a loss:</b> the ranking looks at price behaviour only, so a stock with negative ROE or net profit margin (about 4% of the list) can still rank high on momentum. These carry a ⚠ and a warning in their detail panel. In Controls, "Hide companies that report a loss" removes them from Rankings, Sectors and the chart list. It does not change the backtest, because it uses today's financials and applying them to the past would be look-ahead bias. A one-off write-down can also cause a reported loss, so check the reason.</p>
+    <p><b>Event risk:</b> a 📅 marker means the company is expected to report earnings within two weeks, when stocks often move sharply either way. Dates come from Yahoo and can shift; no marker means no date is known, not that nothing is coming.</p>
+    <p><b>Risk check:</b> the Holdings tab and the cash planner show how your positions have behaved together over up to three years: swings, worst falls, beta, correlation and a replay of the market's worst stretches. It describes the past and is not a forecast.</p>
     <p><b>Pullbacks:</b> the Pullbacks tab lists stocks that fell by at least the amount you choose over a window you choose, ranked by how much supporting evidence they have: news tone, profitability, analyst targets and ratings, expected earnings (forward vs trailing P/E), sales growth, a reasonable valuation, and a six-month trend that is still up. You can narrow it to one sector with the optional Sector dropdown. It lists evidence for and against, and funds are left out because they have no company financials. It is a screen, not a forecast: it cannot be backtested (we only have today's analyst and financial data), and a falling stock is often falling for a good reason.</p>
     <p><b>ETFs and quantum stocks:</b> besides the S&amp;P 500 and 15 Singapore stocks, the ranking includes about 60 hand-picked ETFs (AI and tech themes, other themes, index and international, commodities, crypto and bonds, and the 11 sector ETFs) and 7 quantum-computing stocks plus the QTUM ETF. They are ranked with the same price-only score, so a fund and a stock are compared on momentum, trend and volatility alone. Funds have no company financials, so the fundamentals checks do not apply to them. Quantum stocks are small, very volatile and mostly unprofitable (see the loss warnings). Use the group buttons in Controls to include or exclude any of them.</p>
     <p><b>Holdings:</b> the Holdings tab shows how the app's signals look for stocks you own (trend, news tone, ranking, fundamentals check, price moves) and lists what changed since the previous data update. Your holdings are kept only in this browser's storage. It is a monitor, not a source of buy or sell instructions.</p>
@@ -228,6 +235,7 @@
 <script src="fundamentals.js"></script>
 <script src="holdings.js"></script>
 <script src="pullbacks.js"></script>
+<script src="risk.js"></script>
 <script src="detail.js"></script>
 <script src="app.js"></script>
 <script src="refresh.js"></script>

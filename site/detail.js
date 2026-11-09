@@ -69,6 +69,14 @@
       why.push(mode === "holding" ? "<b>News:</b> no recent headlines for this ticker in our feed." : "<b>News:</b> no recent headlines for this ticker in our feed, so news did not influence it.");
     }
 
+    // 4b. Coming up: earnings and ex-dividend dates
+    const upcoming = F.events(info, now);
+    if (upcoming.earnings || upcoming.exDiv) {
+      const parts = [upcoming.earnings && upcoming.earnings.text, upcoming.exDiv && upcoming.exDiv.text].filter(Boolean);
+      const near = upcoming.earnings && upcoming.earnings.days <= 14;
+      why.push(`<b>Coming up:</b> ${parts.map(esc).join("; ")}.${near ? " Results often move a stock sharply either way." : ""}`);
+    }
+
     // 5. Fundamentals
     if (ev && !isEtf) {
       const sm = ev.summary;

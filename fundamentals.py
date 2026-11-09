@@ -11,7 +11,7 @@ import json
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import yfinance as yf
@@ -31,8 +31,25 @@ def _sig(v, digits=5):
     return None if v is None else float(f"{v:.{digits}g}")
 
 
-def normalize(info: dict) -> dict:
+def _upcoming(info: dict, keys, today: date):
+    """Earliest date among the given Yahoo timestamp fields that is today or later, as YYYY-MM-DD (else None).
+    Yahoo's 'earningsTimestamp' is often the LAST report, so past dates are skipped rather than trusted."""
+    found = []
+    for k in keys:
+        v = info.get(k)
+        if isinstance(v, (int, float)) and v > 0:
+            try:
+                d = datetime.fromtimestamp(v, timezone.utc).date()
+            except (OverflowError, OSError, ValueError):
+                continue
+            if d >= today and (d - today).days <= 400:
+                found.append(d)
+    return min(found).isoformat() if found else None
+
+
+def normalize(info: dict, today: date | None = None) -> dict:
     """Pick and clean the fields the app shows. Pure function (unit-tested)."""
+    today = today or datetime.now(timezone.utc).date()
     g = lambda k: _num(info.get(k))  # noqa: E731
     price = g("currentPrice") or g("regularMarketPrice") or g("navPrice")
     out = {
@@ -67,6 +84,9 @@ def normalize(info: dict) -> dict:
         out["div_yield"] = g("dividendYield") / 100
     elif g("trailingAnnualDividendYield") is not None:
         out["div_yield"] = g("trailingAnnualDividendYield")
+    # Event dates (the app shows "earnings in N days"); expected dates can shift, so the app says "around".
+    out["next_earnings"] = _upcoming(info, ("earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd"), today)
+    out["ex_div"] = _upcoming(info, ("exDividendDate",), today)
     return {k: (_sig(v) if isinstance(v, float) else v) for k, v in out.items() if v not in (None, "")}
 
 

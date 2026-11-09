@@ -273,3 +273,7 @@ tr.extra, tr.detail-row.extra { display: none; }
 .plan-grid .wide { grid-column: 1 / -1; }
 
 .plan-import { background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; margin: 6px 0 10px; }
+
+/* ---- event risk ---- */
+.ev { font-size: .85em; cursor: help; } .ev.soon { filter: saturate(1.4); }
+.ev-line { display: block; margin-top: 4px; font-size: .8rem; font-weight: 600; color: #d99a00; }

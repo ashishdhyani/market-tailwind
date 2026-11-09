@@ -1,6 +1,6 @@
 "use strict";
 (function () {
-  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks;
+  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks, Rk = window.Risk;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -183,6 +183,9 @@
   // ⚠ next to a stock that reports a loss (negative ROE or net margin), with the numbers on hover / tap.
   const lossFlag = (t) => { const l = F.lossInfo(infoOf(t)); return l ? ` <span class="flag" title="${esc(l.text)}">⚠</span>` : ""; };
   const lossLine = (t) => { const l = F.lossInfo(infoOf(t)); return l ? `<span class="flag-line">⚠ ${esc(l.text)}</span>` : ""; };
+  // 📅 when earnings are within two weeks: a big move either way is likely. Dates come from Yahoo and can shift.
+  const evFlag = (t) => { const f = F.eventFlag(infoOf(t)); return f ? ` <span class="ev ${f.level}" title="${esc(f.text)}">📅</span>` : ""; };
+  const evLine = (t) => { const f = F.eventFlag(infoOf(t)); return f ? `<span class="ev-line">📅 ${esc(f.short)}: ${esc(f.text.split(": ")[1])}</span>` : ""; };
   const etfTag = (t) => (infoOf(t)?.type === "ETF" ? ' <span class="tag">ETF</span>' : "");
   const nameTag = (t) => { const n = shortName(t); return n ? `<small class="nm">${esc(n)}</small>` : ""; };
 
@@ -278,7 +281,7 @@
       return `<li><details class="stock" data-t="${esc(r.ticker)}" ${openRows.picks.has(r.ticker) ? "open" : ""}><summary>`
         + `<span class="st-head"><b>${r.rank}. ${esc(r.ticker)}</b>${etfTag(r.ticker)}${nameTag(r.ticker)}</span>`
         + `<span class="why">${esc(E.explain(r, state.horizon))}</span>`
-        + (brief ? `<span class="brief">${esc(brief)}</span>` : "") + lossLine(r.ticker) + `<span class="more">Tap for details</span></summary>`
+        + (brief ? `<span class="brief">${esc(brief)}</span>` : "") + lossLine(r.ticker) + evLine(r.ticker) + `<span class="more">Tap for details</span></summary>`
         + `<div class="detail">${openRows.picks.has(r.ticker) ? detailFor(r.ticker, "rank", r, { n: r.rank, of: total }) : ""}</div></details></li>`;
     }).join("");
     picksCtx = { byTicker, total };
@@ -289,7 +292,7 @@
     const shown = state.rankAll ? res.rows : res.rows.slice(0, 50);
     $("rank-more").hidden = res.rows.length <= 50;
     $("rank-more").textContent = state.rankAll ? "Show only the top 50" : `Show all ${res.rows.length} stocks`;
-    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${etfTag(r.ticker)}${lossFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
+    const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${etfTag(r.ticker)}${lossFlag(r.ticker)}${evFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
       + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.ret_63)}${pc(r.ret_126)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
       + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     const table = $("rank-table");
@@ -537,6 +540,41 @@
     $("hold-text").value = holdings.length ? Hd.toCsv(holdings) : "";
   }
 
+  /* ---------- risk check: how a set of positions has behaved together ---------- */
+
+  /* positions: [{t, value}] in one currency. Compared with SPY (USD) or the STI ETF (SGD). */
+  function riskHtml(positions, cur) {
+    const benchT = cur === "SGD" ? "ES3.SI" : "SPY", bench = benchSeries[benchT];
+    const rep = Rk.riskReport({ positions: positions.map((p) => ({ t: p.t, w: p.value })), series: (t) => series[t] || etfSeries[t] || benchSeries[t], bench, dates });
+    if (rep.error) return `<p class="note">${esc(rep.error)}</p>`;
+    const P1 = (v, sign) => (v == null || !Number.isFinite(v) ? "n/a" : E.pct(v, 1, sign));
+    const bn = esc(benchT);
+    const rel = rep.benchVol ? rep.vol / rep.benchVol : null;
+    const row = (label, mine, market) => `<tr><td>${label}</td><td>${mine}</td><td>${market}</td></tr>`;
+    const stress = rep.stress.length
+      ? `<h3 class="plan-h">If the market fell (a rough estimate)</h3><div class="table-wrap"><table><thead><tr><th>${bn} falls</th>${rep.stress.map((x) => `<th>${E.pct(x.shock, 0)}</th>`).join("")}</tr></thead><tbody><tr><td>Basket would fall about</td>${rep.stress.map((x) => `<td class="neg">${E.pct(x.est, 0)}</td>`).join("")}</tr></tbody></table></div>`
+        + `<p class="note">Based on its beta of ${rep.beta.toFixed(2)}: the average size of its move per 1% move in ${bn}. Real falls are lumpier than an average.</p>` : "";
+    const replays = rep.replays.map((x) => `<li><b>${esc(x.label)}</b> (${esc(x.from)} to ${esc(x.to)}): ${bn} ${P1(x.bench, true)}; this basket would have been ${P1(x.basket, true)}.</li>`).join("");
+    const contrib = rep.contributions.slice(0, 6).map((c) => `<div class="bar-row"><span class="bar-label"><b>${esc(c.t)}</b> ${(c.w * 100).toFixed(0)}% of money</span><span class="bar"><i style="width:${Math.max(1, c.share * 100).toFixed(1)}%"></i></span><span class="bar-val">${(c.share * 100).toFixed(0)}%</span></div>`).join("");
+    const heavy = rep.contributions.filter((c) => c.share > c.w * 1.5 && c.share > 0.25).map((c) => c.t);
+    const solo = rep.contributions.length < 2;
+    return `<p class="note">Measured over ${rep.days} trading days (${esc(rep.from)} to ${esc(rep.to)}) with today's weights held constant.${rep.days < 600 ? ` ${esc(rep.limiting)} has the shortest history, so the window is short.` : ""} It describes the past, not the future.</p>`
+      + `<div class="table-wrap"><table><thead><tr><th></th><th>This basket</th><th>${bn}</th></tr></thead><tbody>`
+      + row("Yearly swings (volatility)", P1(rep.vol), P1(rep.benchVol))
+      + row("Worst fall from a peak", P1(rep.maxDD), P1(rep.benchMaxDD))
+      + row("Worst month", P1(rep.worst21), P1(rep.benchWorst21))
+      + row("Worst single day", P1(rep.worstDay), "")
+      + `</tbody></table></div>`
+      + `<ul class="plan-facts">`
+      + (rel ? `<li>It swung about <b>${rel.toFixed(1)}×</b> as much as ${bn}${rep.beta != null ? `, and moved about <b>${rep.beta.toFixed(2)}×</b> as much on the days the market moved (beta)` : ""}.</li>` : "")
+      + (solo ? "" : `<li>Positions moved together ${rep.avgCorr == null ? "(not measurable)" : rep.avgCorr > 0.6 ? "closely" : rep.avgCorr > 0.3 ? "somewhat" : "only a little"} (average correlation ${rep.avgCorr == null ? "n/a" : rep.avgCorr.toFixed(2)}). It behaved like about <b>${rep.effN.toFixed(1)}</b> equal positions out of ${rep.contributions.length}, and the mix cut its swings to <b>${(100 / rep.divRatio).toFixed(0)}%</b> of what the same positions would give if they all moved in step.</li>`)
+      + (heavy.length ? `<li>${heavy.map(esc).join(", ")} ${heavy.length === 1 ? "contributes" : "contribute"} far more of the risk than ${heavy.length === 1 ? "its" : "their"} share of the money.</li>` : "")
+      + `</ul>${stress}`
+      + (replays ? `<h3 class="plan-h">Replaying the market's worst stretches</h3><ul class="plan-facts">${replays}</ul>` : "")
+      + (solo ? "" : `<h3 class="plan-h">Where the risk comes from</h3>${contrib}<p class="note">Bar = share of the basket's total swings. A position whose bar is much longer than its share of the money adds a lot of risk.</p>`)
+      + `<p class="note">The currency of each stock is ignored (returns are in each stock's own currency), weights are held constant, and a calm past does not guarantee a calm future.</p>`;
+  }
+
   /* ---------- cash planner: you pick the basket, this does the arithmetic ---------- */
 
   const PLAN_KEY = "mt_plan";
@@ -572,7 +610,7 @@
     const rows = res.rows.map((r) => {
       const g = by.get(r.t), l = F.lossInfo(g.info);
       const signals = [g.row.trend_label, g.rank ? `#${g.rank.n}/${g.rank.of}` : null, g.newsWord ? `news ${g.newsWord}` : null, g.fund ? `fundamentals ${g.fund.toLowerCase()}` : null]
-        .filter(Boolean).map(esc).join(" · ") + (l ? ` <span class="flag" title="${esc(l.text)}">⚠ ${esc(l.short)}</span>` : "");
+        .filter(Boolean).map(esc).join(" · ") + (l ? ` <span class="flag" title="${esc(l.text)}">⚠ ${esc(l.short)}</span>` : "") + evFlag(r.t);
       return `<tr><td><b>${esc(r.t)}</b>${etfTag(r.t)}${nameTag(r.t)}</td><td>${cur === "SGD" ? "S$" : "$"}${r.price.toFixed(2)}</td><td>${r.weight.toFixed(1)}%</td>`
         + `<td>${fmtShares(r.shares)}</td><td>${esc(money(r.shares * r.price, cur))}</td><td>${r.pctOfCash.toFixed(1)}%</td><td class="sig">${signals}${r.note ? `<br><span class="muted">${esc(r.note)}</span>` : ""}</td></tr>`;
     }).join("");
@@ -583,12 +621,14 @@
     const facts = [
       summ ? `Largest position: <b>${esc(summ.top.t)}</b> at ${(summ.top.weight * 100).toFixed(0)}% of what you invest.` : "",
       losers.length ? `Reports a loss: <b>${losers.map(esc).join(", ")}</b> (see the ⚠ marks).` : "",
+      ...res.rows.map((r) => F.eventFlag(by.get(r.t).info, Date.now(), 7)).map((f, i) => (f ? `<b>${esc(res.rows[i].t)}</b> reports earnings ${esc(f.short.replace("Earnings ", ""))}: a big move either way is likely.` : "")),
       ...res.warnings.map(esc), ...notes.map(esc),
     ].filter(Boolean).map((x) => `<li>${x}</li>`).join("");
     out.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Stock</th><th>Price</th><th>Weight</th><th>Shares</th><th>Amount</th><th>% of cash</th><th>The app's signals</th></tr></thead><tbody>${rows}</tbody></table></div>`
       + `<p class="plan-total"><b>Invested ${esc(money(T.invested, cur))}</b> of ${esc(money(T.cash, cur))}`
       + `${T.fees ? ` (fees ${esc(money(T.fees, cur))})` : ""} · <b>cash left ${esc(money(T.cashLeft, cur))}</b>${T.reserveCash ? ` (including ${esc(money(T.reserveCash, cur))} kept back)` : ""}</p>`
       + (bars ? `<h3 class="plan-h">Split by sector</h3>${bars}` : "") + (facts ? `<ul class="plan-facts">${facts}</ul>` : "")
+      + `<details class="editor" open><summary>Risk check of this basket <small class="muted">(how it has behaved, not a forecast)</small></summary><div class="ed-body">${riskHtml(res.rows.filter((r) => r.shares > 0).map((r) => ({ t: r.t, value: r.shares * r.price })), cur)}</div></details>`
       + `<p class="note">A calculation from the numbers you entered, not a recommendation. Real orders fill at live prices, which differ from the last close.</p>`;
   }
 
@@ -666,7 +706,7 @@
       return `<li><details class="stock" data-t="${esc(r.t)}" ${openRows.pb.has(r.t) ? "open" : ""}><summary>`
         + `<span class="st-head"><b>${i + 1}. ${esc(r.t)}</b>${lossFlag(r.t)}${nameTag(r.t)}</span>`
         + `<span class="why">Fell <b class="neg">${E.pct(r.drop, 1)}</b> over ${esc(w.label)} (1w ${tr(x.ret_5)}, 1m ${tr(x.ret_21)}, 3m ${tr(x.ret_63)}, 6m ${tr(x.ret_126)}); ${esc(x.trend_label || "")}</span>`
-        + `<span class="pb-count">${r.supports.length} supporting · ${r.cautions.length} caution${r.cautions.length === 1 ? "" : "s"}</span>${sup}${cau}`
+        + `<span class="pb-count">${r.supports.length} supporting · ${r.cautions.length} caution${r.cautions.length === 1 ? "" : "s"}</span>${sup}${cau}${evLine(r.t)}`
         + `<span class="more">Tap for all the evidence</span></summary><div class="detail"></div></details></li>`;
     }).join("");
     pbCtx = new Map(res.shown.map((r) => [r.t, r]));
@@ -721,6 +761,14 @@
       + `<p class="note" style="margin:2px 0 6px">Largest position: <b>${esc(c.top.t)}</b> at ${(c.top.weight * 100).toFixed(0)}% of your ${esc(c.currency)} holdings. Split by sector:</p>`
       + c.groups.map((g) => `<div class="bar-row"><span class="bar-label" title="${esc(g.name)}">${esc(g.name)}</span><span class="bar"><i style="width:${(g.weight * 100).toFixed(1)}%"></i></span><span class="bar-val">${(g.weight * 100).toFixed(0)}%</span></div>`).join("") + `</div>`).join("");
 
+    // --- risk check, per currency (no FX conversion), using holdings that have share counts
+    const riskBox = $("hold-risk");
+    const byCur = {};
+    for (const v of valued) (byCur[v.currency] ||= []).push({ t: v.t, value: v.value });
+    riskBox.innerHTML = Object.keys(byCur).length
+      ? Object.entries(byCur).map(([c, ps]) => `<h3 class="plan-h" style="margin-top:0">${esc(c)} holdings</h3>${riskHtml(ps, c)}`).join("")
+      : '<p class="note">Add holdings with share counts to see how they have swung together.</p>';
+
     // --- what changed since the previous update (per horizon; baseline only moves on a NEW data update)
     const cur = { asOf: `${data.generated}|${newsData ? newsData.generated : ""}`, items: {} };
     for (const x of covered) cur.items[x.t] = Hd.snapshotEntry({ trend: x.row.trend_label, rank: x.rank, news: x.news ? { word: x.newsWord, n: x.news.n } : null, fund: x.fund, price: x.row.price });
@@ -742,6 +790,18 @@
     }
     $("hold-changes").innerHTML = chHtml;
 
+    // --- coming up: earnings within 45 days, ex-dividend within 30
+    const upcoming = [];
+    for (const x of sigs) {
+      const e = F.events(x.info);
+      if (e.earnings && e.earnings.days <= 45) upcoming.push({ t: x.t, days: e.earnings.days, text: e.earnings.text });
+      if (e.exDiv && e.exDiv.days <= 30) upcoming.push({ t: x.t, days: e.exDiv.days, text: e.exDiv.text });
+    }
+    upcoming.sort((a, b) => a.days - b.days);
+    $("hold-events").innerHTML = upcoming.length
+      ? `<div class="changes"><h3>Coming up</h3><p class="note" style="margin:2px 0">Earnings and ex-dividend dates for your holdings. Dates are expected dates from Yahoo and can shift. Results often move a stock sharply either way.</p><ul>`
+        + upcoming.map((u) => `<li><b>${esc(u.t)}</b>${shortName(u.t) ? ` <span class="muted">${esc(shortName(u.t))}</span>` : ""}<br>📅 ${esc(u.text)}</li>`).join("") + `</ul></div>` : "";
+
     // --- table
     const wrap = $("hold-table-wrap");
     wrap.hidden = !covered.length;
@@ -752,7 +812,7 @@
         const r = x.row, h = x.h, val = h.qty ? h.qty * r.price : null, w = weightOf.get(x.t);
         const pl = h.cost ? r.price / h.cost - 1 : null;
         const rank = x.rank ? `#${x.rank.n}/${x.rank.of}` : x.sc.stock ? `#${x.sc.k} in ${esc(x.sc.sector.name)}` : "–";
-        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${etfTag(x.t)}${lossFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
+        return `<tr ${rowAttrs(x.t)}><td><span class="chev">▸</span><b>${esc(x.t)}</b>${etfTag(x.t)}${lossFlag(x.t)}${evFlag(x.t)}${nameTag(x.t)}</td><td>${h.qty ? h.qty.toLocaleString("en-US") : "–"}</td>`
           + `<td>${val ? esc(money(val, x.currency)) : "–"}</td><td>${w != null ? (w * 100).toFixed(0) + "%" : "–"}</td>${pc(pl)}<td>${esc(r.trend_label)}</td>${pc(r.ret_5)}${pc(r.ret_21)}`
           + `<td>${x.newsWord ? esc(x.newsWord) : "–"}</td><td>${x.fund ? esc(x.fund) : x.info?.type === "ETF" ? "ETF" : "–"}</td><td>${rank}</td></tr>`;
       }).join("");

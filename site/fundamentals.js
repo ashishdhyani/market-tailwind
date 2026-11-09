@@ -158,6 +158,39 @@
   }
   const isLossMaking = (info) => lossInfo(info) !== null;
 
+  /* ---------- upcoming events ----------
+     Earnings and ex-dividend dates (from Yahoo, refreshed daily). Earnings dates are often expected dates that can
+     shift, so the app says "around". Dates in the past are ignored, so a stale file never shows an old event. */
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const fmtDate = (iso, nowMs) => `${+iso.slice(8, 10)} ${MONTHS[+iso.slice(5, 7) - 1]}${iso.slice(0, 4) !== String(new Date(nowMs).getUTCFullYear()) ? " " + iso.slice(0, 4) : ""}`;
+  function daysUntil(iso, nowMs) {
+    const n = new Date(nowMs), today = Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate());
+    const d = Date.parse(iso + "T00:00:00Z");
+    return Number.isNaN(d) ? null : Math.round((d - today) / 864e5);
+  }
+  const inDays = (d) => (d === 0 ? "today" : d === 1 ? "tomorrow" : `in ${d} days`);
+
+  /* -> { earnings: {date, days, text}|null, exDiv: {...}|null } for dates today or later. */
+  function events(info, nowMs = Date.now()) {
+    const out = { earnings: null, exDiv: null };
+    if (!info || info.type === "ETF") return out;
+    const one = (iso, label) => {
+      if (!iso) return null;
+      const days = daysUntil(iso, nowMs);
+      return days != null && days >= 0 ? { date: iso, days, text: `${label} around ${fmtDate(iso, nowMs)} (${inDays(days)})` } : null;
+    };
+    out.earnings = one(info.next_earnings, "Earnings");
+    out.exDiv = one(info.ex_div, "Ex-dividend");
+    return out;
+  }
+
+  /* A warning when earnings are close: a big move either way is likely. Null when far away or unknown. */
+  function eventFlag(info, nowMs = Date.now(), within = 14) {
+    const e = events(info, nowMs).earnings;
+    if (!e || e.days > within) return null;
+    return { days: e.days, level: e.days <= 3 ? "soon" : "near", short: `Earnings ${inDays(e.days)}`, text: `${e.text}: results often move a stock sharply either way` };
+  }
+
   const GURUS = [
     { who: "Benjamin Graham", idea: "Buy with a margin of safety: modest P/E and price-to-book, low debt, steady dividends.", metrics: "Forward P/E, Price/book, Debt/equity" },
     { who: "Warren Buffett", idea: "Wonderful businesses at fair prices: high, steady returns on equity, strong margins, little debt, plenty of real cash.", metrics: "ROE, Net margin, Debt/equity, Free-cash-flow yield" },
@@ -165,7 +198,7 @@
     { who: "Joel Greenblatt", idea: "Good and cheap: high returns on capital bought at a high earnings/cash yield.", metrics: "Free-cash-flow yield, EV/EBITDA, ROE" },
   ];
 
-  const api = { lossInfo, isLossMaking, CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
+  const api = { events, eventFlag, lossInfo, isLossMaking, CHECKS, CORE, evaluate, brief, money, mcapLabel, recLabel, GURUS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Fundamentals = api;
 })(typeof self !== "undefined" ? self : this);

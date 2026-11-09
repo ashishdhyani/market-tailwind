@@ -12,7 +12,7 @@ Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM 
 - **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_protect.mjs`)
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_risk.js`, `tests/test_protect.mjs`)
 
 ## Python / Streamlit version (original)
 
@@ -41,6 +41,14 @@ streamlit run app.py      # open the dashboard
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
+
+## Event risk: earnings and ex-dividend dates
+
+Company data now includes each stock's next earnings and ex-dividend dates (from Yahoo, refreshed daily; `next_earnings` / `ex_div` in `fundamentals.json`). A 📅 marker appears next to any stock reporting within two weeks (Rankings, Pullbacks, Holdings, the planner), the detail panel has a "Coming up" line, Holdings lists upcoming events for what you own, and the planner warns about earnings inside a week. Earnings dates are often expected dates that can shift, so the app says "around"; a missing date means Yahoo has none yet, not that nothing is coming. Past dates are ignored, so a stale file never shows an old event. Tests: `tests/test_fundamentals.*`, `tests/test_detail.js`.
+
+## Portfolio risk check
+
+In Holdings (for positions with share counts) and under every cash-planner result: how the basket has behaved over up to three years of history with today's weights held constant. It shows yearly swings, worst fall from a peak, worst month and day against SPY (or the STI ETF for SGD), beta, how closely the positions moved together, a rough "if the market fell 10/20/30%" estimate from beta, a replay of the market's worst month and quarter, and which positions contribute most of the risk. It describes the past, not the future, and currencies are not converted. Logic and tests: `site/risk.js`, `tests/test_risk.js` (hand-built cases for correlation, beta, drawdown, crash replay and short history).
 
 ## Pullbacks (a screen, not a forecast)
 
