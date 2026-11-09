@@ -277,3 +277,7 @@ tr.extra, tr.detail-row.extra { display: none; }
 /* ---- event risk ---- */
 .ev { font-size: .85em; cursor: help; } .ev.soon { filter: saturate(1.4); }
 .ev-line { display: block; margin-top: 4px; font-size: .8rem; font-weight: 600; color: #d99a00; }
+
+/* ---- scoreboard: let the long list names wrap so the numbers stay on screen ---- */
+#sb-tables td:first-child, #sb-tables th:first-child { white-space: normal; min-width: 128px; max-width: 150px; font-size: .8rem; }
+#sb-tables td, #sb-tables th { padding: 8px 6px; }

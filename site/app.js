@@ -1,11 +1,11 @@
 "use strict";
 (function () {
-  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks, Rk = window.Risk;
+  const E = window.Engine, F = window.Fundamentals, D = window.Detail, Hd = window.Holdings, P = window.Pullbacks, Rk = window.Risk, Sb = window.Scoreboard, Pk = window.Picks;
   const $ = (id) => document.getElementById(id);
   const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null, groupOf = {};
+  let data, dates, series, feats, benchSeries, etfSeries, sectorData = null, newsData = null, fundData = null, picksLog = null, groupOf = {};
   const openRows = { rank: new Set(), sec: new Set(), picks: new Set(), hold: new Set(), pb: new Set() };
   const secCache = {};
   let picksCtx = null;
@@ -149,7 +149,7 @@
     $("horizon-blurb").textContent = `Ranking by ${hz.blurb}, plus trend, volatility and closeness to the 1-year high.`;
 
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
-    for (const t of ["rank", "sectors", "news", "pull", "hold", "chart", "bt", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
+    for (const t of ["rank", "sectors", "news", "pull", "hold", "chart", "bt", "score", "about"]) $(`tab-${t}`).hidden = t !== state.tab;
 
     // Sectors and About do not depend on the watchlist selection.
     const tooFew = (state.tab === "bt" ? state.universe.size : state.active.size) < 6 && ["rank", "chart", "bt", "pull"].includes(state.tab);
@@ -163,6 +163,7 @@
     if (state.tab === "news") renderNews();
     if (state.tab === "hold") renderHoldings();
     if (state.tab === "pull") renderPullbacks();
+    if (state.tab === "score") renderScoreboard();
     if (state.tab === "rank") renderRank();
     if (state.tab === "chart") renderChart();
     if (state.tab === "bt") renderBacktest();
@@ -668,6 +669,37 @@
     };
   }
 
+  /* ---------- scoreboard: how the recorded lists did ---------- */
+
+  function renderScoreboard() {
+    const status = $("sb-status"), tables = $("sb-tables"), latest = $("sb-latest");
+    tables.innerHTML = ""; latest.innerHTML = "";
+    if (!picksLog || !picksLog.snapshots.length) { status.textContent = "No picks have been recorded yet. The refresh job records them automatically."; return; }
+    const labels = Object.fromEntries(Pk.LISTS.map((l) => [l.key, l.label]));
+    const res = Sb.evaluate({ log: picksLog, series: (t) => series[t] || etfSeries[t], dates, bench: benchSeries.SPY, labels });
+    const order = Pk.LISTS.map((l) => l.key).filter((k) => res.lists[k]);
+    const firstD = new Date(res.firstDate + "T00:00:00Z"), when = new Date(firstD.getTime() + 8 * 864e5).toISOString().slice(0, 10);
+    const anyDone = order.some((k) => Sb.HORIZONS.some((h) => res.lists[k].stats[h.days].n > 0));
+    status.textContent = `${res.snapshots} daily snapshot${res.snapshots === 1 ? "" : "s"} recorded, ${res.firstDate} to ${res.lastDate}. `
+      + (anyDone ? "Results so far are listed below; treat them with great caution until there are dozens." : `Too early for results: the first 1-week results arrive about a week after the first snapshot (around ${when}).`);
+    const pcell = (v, signed) => `<td class="${cls(v)}">${E.pct(v, 1, signed)}</td>`;
+    for (const h of Sb.HORIZONS) {
+      if (!order.some((k) => res.lists[k].stats[h.days].n > 0)) continue;
+      const rows = order.filter((k) => res.lists[k].stats[h.days].n > 0).map((k) => {
+        const x = res.lists[k].stats[h.days];
+        return `<tr><td>${esc(res.lists[k].label)}</td><td>${x.n}</td>${pcell(x.basket, true)}${pcell(x.bench, true)}`
+          + `<td class="${cls(x.excess)}">${E.pct(x.excess, 1, true)}${x.se != null ? ` <small class="muted">±${E.pct(x.se, 1)}</small>` : ""}</td><td>${(x.hit * 100).toFixed(0)}%</td><td>${x.windows}</td></tr>`;
+      }).join("");
+      tables.innerHTML += `<h3 class="plan-h">After ${esc(h.label)}</h3><div class="table-wrap"><table><thead><tr><th>List</th><th>Results</th><th>Picks</th><th>SPY</th><th>Difference</th><th>Beat SPY</th><th>Independent windows</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    if (anyDone) tables.innerHTML += `<p class="note">“Results” counts daily snapshots that have matured; they overlap, so “Independent windows” is closer to the real sample size. “±” is one standard error of the difference. A difference is only meaningful if it is several times its “±” <i>and</i> there are many independent windows. Before costs and taxes. Past results do not predict future returns.</p>`;
+    latest.innerHTML = order.map((k) => {
+      const L = res.lists[k], r = L.rows[L.rows.length - 1];
+      const since = r.sinceEntry ? `${E.pct(r.sinceEntry.basket, 1, true)} vs SPY ${E.pct(r.sinceEntry.bench, 1, true)} after ${r.sinceEntry.days} trading day${r.sinceEntry.days === 1 ? "" : "s"}` : "waiting for the next close";
+      return `<div class="cur-block"><b>${esc(L.label)}</b> <span class="muted">(recorded ${esc(r.date)})</span><br>${r.picks.map((t) => `<b>${esc(t)}</b>${shortName(t) ? ` <span class="muted">${esc(shortName(t))}</span>` : ""}`).join(" · ")}<br><span class="muted">So far:</span> ${esc(since)}</div>`;
+    }).join("");
+  }
+
   /* ---------- pullbacks: a screen, the same for everyone ---------- */
 
   function pullbackScreen() {
@@ -902,9 +934,10 @@
     .then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r.json(); })
     .catch((err) => { if (!optional) throw err; console.warn(err); return null; });
 
-  Promise.all([getJson("data.json"), getJson("news.json", true), getJson("fundamentals.json", true)])
-    .then(([d, news, fund]) => {
+  Promise.all([getJson("data.json"), getJson("news.json", true), getJson("fundamentals.json", true), getJson("picks_log.json", true)])
+    .then(([d, news, fund, plog]) => {
       if (fund && fund.items) fundData = fund;
+      if (plog && Array.isArray(plog.snapshots)) picksLog = plog;
       if (news && Array.isArray(news.items)) { newsData = news; $("news-generated").textContent = news.generated; }
       setup(d);
     })

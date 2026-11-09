@@ -86,6 +86,7 @@
     <button role="tab" data-tab="hold" aria-selected="false">Holdings</button>
     <button role="tab" data-tab="chart" aria-selected="false">Chart</button>
     <button role="tab" data-tab="bt" aria-selected="false">Backtest</button>
+    <button role="tab" data-tab="score" aria-selected="false">Scoreboard</button>
     <button role="tab" data-tab="about" aria-selected="false">About</button>
   </nav>
 
@@ -210,10 +211,20 @@
     </details>
   </section>
 
+  <section id="tab-score" class="panel" hidden>
+    <h2>Scoreboard: how the app's own picks did</h2>
+    <p class="note">Every refresh, the app records its default top picks (Rankings for each horizon, Pullbacks, and the leader of each top sector) in a log on GitHub, <b>before anyone knows how they turn out</b>. This tab measures those exact lists afterwards: equal-weighted, bought at the next trading day's close, against SPY over the same days. Nothing is filled in after the fact, so unlike the Backtest this is genuine out-of-sample evidence. It is before costs and taxes, and it is <b>a tiny sample at first</b>: consecutive daily lists overlap, so look at the "independent windows" column, and don't read anything into it until there are dozens. It is not advice.</p>
+    <p id="sb-status" class="note"></p>
+    <div id="sb-tables"></div>
+    <h3 class="plan-h">Latest recorded picks</h3>
+    <div id="sb-latest"></div>
+  </section>
+
   <section id="tab-about" class="panel" hidden>
     <p><b>How the score works:</b> each stock is ranked against the others on 12-1 month momentum (35%), 6-1 month momentum (20%), trend vs. 50/200-day averages (20%), low volatility (15%) and closeness to the 1-year high (10%).</p>
     <p><b>Important:</b> Market Tailwind is a research tool, not financial advice. The rankings, sector views and suggested stocks and ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and don't rely on them. See "Read the full disclaimer" at the top of the page.</p>
     <p><b>Companies that report a loss:</b> the ranking looks at price behaviour only, so a stock with negative ROE or net profit margin (about 4% of the list) can still rank high on momentum. These carry a ⚠ and a warning in their detail panel. In Controls, "Hide companies that report a loss" removes them from Rankings, Sectors and the chart list. It does not change the backtest, because it uses today's financials and applying them to the past would be look-ahead bias. A one-off write-down can also cause a reported loss, so check the reason.</p>
+    <p><b>Scoreboard:</b> the Scoreboard tab judges the app's own default picks using a log recorded on every refresh (committed to GitHub, so the history shows when each list was written). Results appear as the weeks pass and carry an "independent windows" count, because daily snapshots overlap. It is honest evidence but a small sample early on, and it is not advice.</p>
     <p><b>Event risk:</b> a 📅 marker means the company is expected to report earnings within two weeks, when stocks often move sharply either way. Dates come from Yahoo and can shift; no marker means no date is known, not that nothing is coming.</p>
     <p><b>Risk check:</b> the Holdings tab and the cash planner show how your positions have behaved together over up to three years: swings, worst falls, beta, correlation and a replay of the market's worst stretches. It describes the past and is not a forecast.</p>
     <p><b>Pullbacks:</b> the Pullbacks tab lists stocks that fell by at least the amount you choose over a window you choose, ranked by how much supporting evidence they have: news tone, profitability, analyst targets and ratings, expected earnings (forward vs trailing P/E), sales growth, a reasonable valuation, and a six-month trend that is still up. You can narrow it to one sector with the optional Sector dropdown. It lists evidence for and against, and funds are left out because they have no company financials. It is a screen, not a forecast: it cannot be backtested (we only have today's analyst and financial data), and a falling stock is often falling for a good reason.</p>
@@ -236,6 +247,8 @@
 <script src="holdings.js"></script>
 <script src="pullbacks.js"></script>
 <script src="risk.js"></script>
+<script src="picks.js"></script>
+<script src="scoreboard.js"></script>
 <script src="detail.js"></script>
 <script src="app.js"></script>
 <script src="refresh.js"></script>

@@ -12,7 +12,7 @@ Finance twice a day (8:00 AM Singapore time, Tue-Sat, for the US close; 9:00 PM 
 - **Refresh button:** the page has a "Refresh data" button that starts the workflow. The first click asks for a GitHub fine-grained token (this repo only, permission *Actions: Read and write*), kept only in that browser. Or run it by hand: repo → Actions → Run workflow.
 - Preview locally: `cd site && python3 -m http.server 8000`, then open http://localhost:8000
 - Refresh data locally: `python data.py && python export_web.py && python news.py && python fundamentals.py`
-- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_risk.js`, `tests/test_protect.mjs`)
+- Check the JS against the Python original: `python tests/crosscheck.py > /tmp/py.json && node tests/crosscheck.js /tmp/py.json` (and `tests/crosscheck_sectors.*`, `tests/test_sentiment.py`, `tests/test_news.py`, `tests/test_fundamentals.*`, `tests/test_detail.js`, `tests/test_holdings.js`, `tests/test_pullbacks.js`, `tests/test_risk.js`, `tests/test_scoreboard.js`, `tests/test_protect.mjs`)
 
 ## Python / Streamlit version (original)
 
@@ -41,6 +41,10 @@ streamlit run app.py      # open the dashboard
 | `fundamentals.py` | Download company names and key numbers (forward P/E, PEG, ROE, margins, growth, debt, cash flow, analyst targets) into `site/fundamentals.json`. |
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
+
+## Scoreboard (forward, out-of-sample)
+
+Backtests here are flattered by survivorship bias, so the Scoreboard keeps a record that cannot be: every refresh, `tools/snapshot_picks.mjs` appends the app's **default** picks (Rankings top 5 for each of the six horizons, Pullbacks top 5, and the leader of each of the top 3 sectors) to `site/picks_log.json`, which the workflow commits. Git history therefore shows when each list was written, before anyone knew how it turned out. The Scoreboard tab then measures those exact lists: equal-weighted, bought at the next trading day's close (the same one-day delay as the backtest), against SPY after 1 week, 1 month and 3 months, before costs and taxes. Nothing is backfilled. A damaged log makes the tool stop instead of overwriting it. Early on it is a tiny sample (daily lists overlap), so every average carries its count, a standard error and the number of independent windows. Logic and tests: `site/picks.js`, `site/scoreboard.js`, `tests/test_scoreboard.js`.
 
 ## Event risk: earnings and ex-dividend dates
 

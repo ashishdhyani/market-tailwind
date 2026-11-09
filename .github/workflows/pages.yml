@@ -47,19 +47,25 @@ jobs:
           python fundamentals.py --max-age-hours 20 || echo "::warning::fundamentals refresh failed; keeping the last file"
           wait $news_pid || echo "::warning::news refresh failed; keeping the last news.json"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Record today's picks for the Scoreboard
+        # Appends the app's default picks to site/picks_log.json (one per price date). It stops, rather than
+        # overwrite, if the log is damaged, so the history is never lost.
+        continue-on-error: true
+        run: node tools/snapshot_picks.mjs site
+
       - name: Commit refreshed data
         run: |
           if [ -n "$(git status --porcelain site sp500.csv)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add site/data.json site/news.json site/fundamentals.json sp500.csv
+            git add site/data.json site/news.json site/fundamentals.json site/picks_log.json sp500.csv
             git commit -m "Refresh price and news data"
             git push
           fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Password-protect the site
         # Encrypts everything in site/ into dist/ (see tools/protect.mjs). Fails, and so publishes
