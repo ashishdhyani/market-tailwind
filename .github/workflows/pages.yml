@@ -65,9 +65,20 @@ jobs:
             git push
           fi
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Password-protect the site
+        # Encrypts everything in site/ into dist/ (see tools/protect.mjs). Fails, and so publishes
+        # nothing, if the SITE_PASSWORD secret is missing or shorter than 12 characters.
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: node tools/protect.mjs site dist
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: dist
       - id: deployment
         uses: actions/deploy-pages@v4

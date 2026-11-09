@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tailwind">
+<meta name="theme-color" content="#0f766e">
+<title>Market Tailwind</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f766e'/%3E%3Cpath d='M18 70 40 46 55 58 82 28' fill='none' stroke='white' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root { --bg: #f6f7f9; --card: #fff; --text: #151a21; --muted: #5d6877; --line: #dde2e8; --accent: #0f766e; --err: #b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0e1217; --card: #171d25; --text: #e8ecf1; --muted: #98a3b1; --line: #2a333f; --accent: #2dd4bf; --err: #f87171; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--text);
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .card { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px; }
+  h1 { margin: 0 0 4px; font-size: 1.4rem; }
+  .sub, .small { color: var(--muted); font-size: .88rem; margin: 0 0 16px; }
+  .small { margin: 16px 0 0; font-size: .78rem; }
+  label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
+  input[type=password], input[type=text] { width: 100%; padding: 12px; font: inherit; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); }
+  .chk { display: flex; align-items: center; gap: 8px; font-weight: 400; margin: 12px 0; }
+  .chk input { width: 18px; height: 18px; accent-color: var(--accent); }
+  button { width: 100%; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer; min-height: 46px; }
+  button:disabled { opacity: .6; cursor: progress; }
+  .err { color: var(--err); font-size: .88rem; margin: 10px 0 0; }
+  .sr { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+</style>
+</head>
+<body>
+<main class="card" id="gate">
+  <h1>Market Tailwind</h1>
+  <p class="sub">This app is private. Enter the password to open it.</p>
+  <form id="form">
+    <input type="text" class="sr" name="username" autocomplete="username" value="market-tailwind" tabindex="-1" aria-hidden="true" readonly>
+    <label for="pw">Password</label>
+    <input id="pw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" enterkeyhint="go" required>
+    <label class="chk"><input id="keep" type="checkbox"> Keep me signed in on this device</label>
+    <button id="go" type="submit">Unlock</button>
+    <p id="err" class="err" role="alert" hidden></p>
+  </form>
+  <p class="small">Research tool, not financial advice.</p>
+  <noscript><p class="err">JavaScript is required to open this app.</p></noscript>
+</main>
+
+<script>
+/* Unlocks the encrypted app bundle in the browser. The password never leaves this page.
+   Format of bundle.enc: "MT1\0" | 12-byte IV | AES-256-GCM(gzip(JSON of {path: text})).
+   Key = PBKDF2-SHA256(password, fixed app salt, 600,000 iterations). */
+(() => {
+  "use strict";
+  const SALT = new TextEncoder().encode("market-tailwind/v1"), ITER = 600000, MAGIC = [0x4d, 0x54, 0x31, 0x00];
+  const $ = (id) => document.getElementById(id);
+  const KEY_NAME = "mt_key";
+
+  const ss = { get: (s) => { try { return s.getItem(KEY_NAME); } catch { return null; } },
+               set: (s, v) => { try { s.setItem(KEY_NAME, v); } catch { /* private mode */ } },
+               del: (s) => { try { s.removeItem(KEY_NAME); } catch { /* ignore */ } } };
+  const toB64 = (u8) => btoa(String.fromCharCode(...u8));
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const forget = () => { ss.del(sessionStorage); ss.del(localStorage); };
+
+  async function keyFromPassword(pw) {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: "PBKDF2", salt: SALT, iterations: ITER, hash: "SHA-256" }, base, 256));
+  }
+
+  async function decrypt(rawKey, buf) {
+    const u8 = new Uint8Array(buf);
+    if (MAGIC.some((m, i) => u8[i] !== m)) throw new Error("bad format");
+    const key = await crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["decrypt"]);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8.slice(4, 16) }, key, u8.slice(16));  // throws if the key is wrong
+    if (typeof DecompressionStream === "undefined") throw new Error("old browser");
+    const text = await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    return JSON.parse(text);
+  }
+
+  async function loadBundle() {
+    const r = await fetch("bundle.enc", { cache: "no-cache" });
+    if (!r.ok) throw new Error("download " + r.status);
+    return r.arrayBuffer();
+  }
+
+  /* Replace this page with the app. Its data files are served from memory by a fetch shim; its CSS and
+     scripts are inlined (the closing-tag sequence is escaped so file contents cannot end the tag early). */
+  function launch(files) {
+    const realFetch = window.fetch.bind(window);
+    const dir = location.pathname.replace(/[^/]*$/, "");
+    window.fetch = (input, init) => {
+      try {
+        const url = new URL(typeof input === "string" ? input : input.url, location.href);
+        const key = url.origin === location.origin ? decodeURIComponent(url.pathname.slice(dir.length)) : null;
+        if (key && key.endsWith(".json") && Object.prototype.hasOwnProperty.call(files, key)) {
+          return Promise.resolve(new Response(files[key], { status: 200, headers: { "Content-Type": "application/json" } }));
+        }
+      } catch { /* fall through to the real fetch */ }
+      return realFetch(input, init);
+    };
+    const html = files["index.html"]
+      .replace(/<link rel="stylesheet" href="([^"]+)">/g, (m, p) => (typeof files[p] === "string" ? "<style>" + files[p] + "</style>" : m))
+      .replace(/<script src="([^"]+)"><\/script>/g, (m, p) => (typeof files[p] === "string" ? "<script>" + files[p].replace(/<\/script/gi, "<\\/script") + "<\/script>" : m));
+    document.open();
+    document.write(html);
+    document.close();
+    setTimeout(() => {
+      const row = document.querySelector(".refresh-small");
+      if (!row) return;
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "link"; b.textContent = "🔒 Lock app";
+      b.onclick = () => { forget(); location.reload(); };
+      row.append(b);
+    }, 0);
+  }
+
+  function showError(msg) { const e = $("err"); e.textContent = msg; e.hidden = !msg; }
+  const explain = (err) => (err && err.message === "old browser") ? "This browser is too old to open the app (iOS 16.4 or newer is needed)."
+    : (err && /^download/.test(err.message)) ? "Could not download the app. Check your connection and try again." : "Wrong password.";
+
+  async function tryKey(rawKey) { return launch(await decrypt(rawKey, await loadBundle())); }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    showError(""); $("go").disabled = true; $("go").textContent = "Unlocking…";
+    try {
+      const raw = await keyFromPassword($("pw").value);
+      const files = await decrypt(raw, await loadBundle());
+      const enc = toB64(raw);
+      ss.set(sessionStorage, enc);
+      if ($("keep").checked) ss.set(localStorage, enc);
+      launch(files);
+    } catch (err) {
+      showError(explain(err)); $("go").disabled = false; $("go").textContent = "Unlock"; $("pw").select();
+    }
+  });
+
+  // Already signed in on this tab (or "keep me signed in")? Skip the form.
+  const saved = ss.get(sessionStorage) || ss.get(localStorage);
+  if (saved) {
+    $("go").disabled = true; $("go").textContent = "Unlocking…";
+    tryKey(fromB64(saved)).catch((err) => {
+      forget();
+      $("go").disabled = false; $("go").textContent = "Unlock";
+      if (err && (err.message === "old browser" || /^download/.test(err.message))) showError(explain(err));
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -41,6 +41,19 @@ streamlit run app.py      # open the dashboard
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
+## Password protection
+
+The published site is encrypted. `tools/protect.mjs` compresses everything in `site/` and encrypts it (AES-256-GCM, key from your password via PBKDF2 with 600,000 rounds) into `dist/bundle.enc`, next to a small login page. The browser asks for the password, decrypts the app locally and runs it, so the password is never sent anywhere.
+
+**Set it up once:** repo → Settings → Secrets and variables → Actions → New repository secret → name `SITE_PASSWORD`, value a long passphrase (at least 12 characters; use a few random words). The workflow fails, and publishes nothing, if it is missing. To change the password, update the secret and run the workflow.
+
+**Limits, honestly:**
+- It is a gate on the *page*, not real server-side security. Anyone can download `bundle.enc` and try passwords offline at full speed, so a weak password can be cracked. Use a long, unique passphrase and do not reuse it.
+- This repository is public. The raw code and market data in `site/` are readable on GitHub, and only the published page is protected. Never commit anything private (a trade statement, account numbers) to this repo.
+- Locked on first load; "Keep me signed in" stores a derived key (not the password) in that browser. "Lock app" removes it.
+
+Try it locally: `SITE_PASSWORD='a long test passphrase' node tools/protect.mjs site dist`, then serve `dist/` (for example `cd dist && python3 -m http.server 8000`). Tests: `node tests/test_protect.mjs`.
+
 ## Disclaimer
 
 Market Tailwind is a research tool, **not financial advice**. The rankings, sector views and suggested stocks/ETFs are automated ideas to investigate, not instructions to buy or sell. Do your own research and do not rely on them; investing involves risk, including losing all your money. The same notice appears on every page of the app.
