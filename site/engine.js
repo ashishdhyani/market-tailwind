@@ -12,6 +12,8 @@
      over the last `days` trading days (weight 0.35 + 0.20 = 0.55), and rebalance at that cadence. */
   const HORIZONS = {
     long: { label: "Long-term", days: null, rebalance: "month", blurb: "12-1 and 6-1 month momentum" },
+    "6m": { label: "6 months", days: 126, rebalance: "month", blurb: "last 6-month return" },
+    "3m": { label: "3 months", days: 63, rebalance: "month", blurb: "last 3-month return" },
     "1m": { label: "1 month", days: 21, rebalance: "month", blurb: "last 1-month return" },
     "2w": { label: "2 weeks", days: 10, rebalance: "2week", blurb: "last 2-week return" },
     "1w": { label: "1 week", days: 5, rebalance: "week", blurb: "last 1-week return" },
@@ -99,15 +101,17 @@
     const sma50 = rollMeanFast(p, 50), sma200 = rollMeanFast(p, 200);
     const hi = rollMaxFast(p, 252);
     const vol = rollStdFast(pctChange(p), 63);
-    const s5 = shift(p, 5), s10 = shift(p, 10);
+    const s5 = shift(p, 5), s10 = shift(p, 10), s63 = shift(p, 63);
     const f = { mom_12_1: nan(n), mom_6_1: nan(n), trend: nan(n), vol_63d: nan(n), drawdown_1y: nan(n),
-      ret_5: nan(n), ret_10: nan(n), ret_21: nan(n) };
+      ret_5: nan(n), ret_10: nan(n), ret_21: nan(n), ret_63: nan(n), ret_126: nan(n) };
     for (let i = 0; i < n; i++) {
       f.mom_12_1[i] = s21[i] / s252[i] - 1;
       f.mom_6_1[i] = s21[i] / s126[i] - 1;
       f.ret_5[i] = p[i] / s5[i] - 1;
       f.ret_10[i] = p[i] / s10[i] - 1;
       f.ret_21[i] = p[i] / s21[i] - 1;
+      f.ret_63[i] = p[i] / s63[i] - 1;
+      f.ret_126[i] = p[i] / s126[i] - 1;
       if (!Number.isNaN(sma200[i]) && !Number.isNaN(p[i])) {
         f.trend[i] = (p[i] > sma200[i] ? 1 : 0) + (sma50[i] > sma200[i] ? 1 : 0);
       }
@@ -144,7 +148,7 @@
      A score is missing if any component is missing (NaN propagates, like the pandas sum). */
   function scores(feats, n, horizon = "long", idx = null) {
     const days = HORIZONS[horizon].days;
-    const retKey = { 5: "ret_5", 10: "ret_10", 21: "ret_21" }[days];
+    const retKey = days ? `ret_${days}` : null;
     const zs = {
       mom_12_1: retKey ? null : zScore(feats.map((f) => f.mom_12_1), n, idx),
       mom_6_1: retKey ? null : zScore(feats.map((f) => f.mom_6_1), n, idx),
@@ -172,7 +176,7 @@
   /* Ranked snapshot on the most recent date with any score. */
   /* Last date on which at least one stock has every input of the score (the score is missing if any is). */
   function latestIndex(feats, n, horizon) {
-    const retKey = { 5: "ret_5", 10: "ret_10", 21: "ret_21" }[HORIZONS[horizon].days];
+    const retKey = HORIZONS[horizon].days ? `ret_${HORIZONS[horizon].days}` : null;
     for (let i = n - 1; i >= 0; i--) {
       for (const f of feats) {
         if (f.trend[i] === f.trend[i] && f.vol_63d[i] === f.vol_63d[i] && f.drawdown_1y[i] === f.drawdown_1y[i]
@@ -192,7 +196,7 @@
       rows.push({
         ticker: t, price: prices[j][d], score: sc[j][d],
         mom_12_1: feats[j].mom_12_1[d], mom_6_1: feats[j].mom_6_1[d],
-        ret_5: feats[j].ret_5[d], ret_10: feats[j].ret_10[d], ret_21: feats[j].ret_21[d],
+        ret_5: feats[j].ret_5[d], ret_10: feats[j].ret_10[d], ret_21: feats[j].ret_21[d], ret_63: feats[j].ret_63[d], ret_126: feats[j].ret_126[d],
         trend: feats[j].trend[d], trend_label: TREND_LABEL[feats[j].trend[d]],
         vol_63d: feats[j].vol_63d[d], drawdown_1y: feats[j].drawdown_1y[d],
       });
@@ -211,8 +215,8 @@
   function explain(r, horizon = "long") {
     const h = HORIZONS[horizon];
     const lead = h.days
-      ? `Return over ${h.label.toLowerCase()} ${pct(r[{ 5: "ret_5", 10: "ret_10", 21: "ret_21" }[h.days]], 1, true)} `
-        + `(1w ${pct(r.ret_5, 1, true)}, 2w ${pct(r.ret_10, 1, true)}, 1m ${pct(r.ret_21, 1, true)}); `
+      ? `Return over ${h.label.toLowerCase()} ${pct(r[`ret_${h.days}`], 1, true)} `
+        + `(1w ${pct(r.ret_5, 1, true)}, 2w ${pct(r.ret_10, 1, true)}, 1m ${pct(r.ret_21, 1, true)}, 3m ${pct(r.ret_63, 1, true)}, 6m ${pct(r.ret_126, 1, true)}); `
       : `12-1m momentum ${pct(r.mom_12_1, 0, true)}, 6-1m ${pct(r.mom_6_1, 0, true)}; `;
     return lead
       + `${r.trend_label.toLowerCase()}; volatility ${pct(r.vol_63d)}; `

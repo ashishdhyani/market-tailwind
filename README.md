@@ -42,6 +42,10 @@ streamlit run app.py      # open the dashboard
 | `news.py`, `sentiment.py` | Download Yahoo Finance headlines per ticker and score their tone into `site/news.json`. |
 | `site/` | Static web app (HTML/CSS/JS) published to GitHub Pages. |
 
+## Horizons
+
+The Horizon selector re-ranks everything for a time window: **Long-term** (12-1 and 6-1 month momentum, the original model), **6 months**, **3 months**, **1 month**, **2 weeks** and **1 week**. The short ones keep the same trend / volatility / near-high parts and replace both momentum terms (55% together) with the return over just that window. The backtest rebalances at a matching cadence: monthly (long-term, 6 months, 3 months, 1 month), every second week (2 weeks) or weekly (1 week). Each horizon is checked against an independent pandas calculation (`tests/crosscheck.*`).
+
 ## Loss warnings
 
 The score is price-only, so a stock that reports a loss (negative ROE or net margin, about 4% of the list) can rank high on momentum. Those stocks get a ⚠ and a warning banner, and a Controls switch, "Hide companies that report a loss", removes them from Rankings, Sectors and the chart list. The backtest ignores the switch (today's financials applied to the past would be look-ahead bias).

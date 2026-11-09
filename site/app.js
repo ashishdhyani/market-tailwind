@@ -278,14 +278,14 @@
     }).join("");
     picksCtx = { byTicker, total };
 
-    const head = ["Stock", "Rank", "Price", "Fwd P/E", "Score", "1 week", "2 weeks", "1 month", "12-1m mom.", "6-1m mom.", "Trend", "Volatility", "From 1y high"];
+    const head = ["Stock", "Rank", "Price", "Fwd P/E", "Score", "1 week", "2 weeks", "1 month", "3 months", "6 months", "12-1m mom.", "6-1m mom.", "Trend", "Volatility", "From 1y high"];
     const pc = (v) => `<td class="${cls(v)}">${E.pct(v, 1, true)}</td>`;
     const fpe = (t) => { const v = infoOf(t)?.fwd_pe; return v > 0 ? v.toFixed(1) : "–"; };
     const shown = state.rankAll ? res.rows : res.rows.slice(0, 50);
     $("rank-more").hidden = res.rows.length <= 50;
     $("rank-more").textContent = state.rankAll ? "Show only the top 50" : `Show all ${res.rows.length} stocks`;
     const rows = shown.map((r) => `<tr ${rowAttrs(r.ticker)}><td><span class="chev">▸</span><b>${esc(r.ticker)}</b>${lossFlag(r.ticker)}${nameTag(r.ticker)}</td><td>${r.rank}</td><td>${num(r.price)}</td>`
-      + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
+      + `<td>${fpe(r.ticker)}</td><td>${num(r.score)}</td>${pc(r.ret_5)}${pc(r.ret_10)}${pc(r.ret_21)}${pc(r.ret_63)}${pc(r.ret_126)}${pc(r.mom_12_1)}${pc(r.mom_6_1)}`
       + `<td>${esc(r.trend_label)}</td><td>${E.pct(r.vol_63d, 1)}</td><td>${E.pct(r.drawdown_1y, 1)}</td></tr>`).join("");
     const table = $("rank-table");
     table.innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows}</tbody>`;
@@ -364,7 +364,7 @@
   const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : "#");
   const toneWord = (z) => (z > 0.5 ? "better than most" : z < -0.5 ? "weaker than most" : "about average");
   const retTxt = (v) => E.pct(v, 1, true);
-  const horizonRetKey = () => ({ 5: "ret_5", 10: "ret_10", 21: "ret_21" }[E.HORIZONS[state.horizon].days] || "ret_21");
+  const horizonRetKey = () => (E.HORIZONS[state.horizon].days ? `ret_${E.HORIZONS[state.horizon].days}` : "ret_21");
   const horizonRetLabel = () => (E.HORIZONS[state.horizon].days ? E.HORIZONS[state.horizon].label : "1 month");
 
   function ago(iso) {
@@ -455,7 +455,7 @@
     while (i >= 0 && Number.isNaN(src.p[i])) i--;
     if (i < 0) return null;
     const f = src.f, tr = f.trend[i];
-    return { price: src.p[i], mom_12_1: f.mom_12_1[i], mom_6_1: f.mom_6_1[i], ret_5: f.ret_5[i], ret_10: f.ret_10[i], ret_21: f.ret_21[i],
+    return { price: src.p[i], mom_12_1: f.mom_12_1[i], mom_6_1: f.mom_6_1[i], ret_5: f.ret_5[i], ret_10: f.ret_10[i], ret_21: f.ret_21[i], ret_63: f.ret_63[i], ret_126: f.ret_126[i],
       trend: tr, trend_label: E.TREND_LABEL[tr] || "n/a", vol_63d: f.vol_63d[i], drawdown_1y: f.drawdown_1y[i] };
   }
   function watchlistRanks() {

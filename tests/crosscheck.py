@@ -39,7 +39,7 @@ def week_ends(index, every=1):
     return d[::every]
 
 out["short"] = {}
-for key, days, cadence in [("1m", 21, "month"), ("2w", 10, 2), ("1w", 5, 1)]:
+for key, days, cadence in [("6m", 126, "month"), ("3m", 63, "month"), ("1m", 21, "month"), ("2w", 10, 2), ("1w", 5, 1)]:
     sc = with_horizon(uni, days)
     vd = sc.dropna(how="all").index[-1]
     s = sc.loc[vd].dropna().sort_values(ascending=False)

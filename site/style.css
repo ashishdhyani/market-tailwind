@@ -245,3 +245,11 @@ tr.extra, tr.detail-row.extra { display: none; }
 .switch { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 14px; font-size: .92rem; cursor: pointer; }
 .switch input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--accent); flex: none; }
 .switch small { display: block; color: var(--muted); font-size: .76rem; margin-top: 2px; }
+
+/* ---- six horizon buttons: two rows of three on a phone ---- */
+@media (max-width: 520px) {
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .seg button { border-left: 1px solid var(--line); }
+  .seg button:nth-child(3n + 1) { border-left: 0; }
+  .seg button:nth-child(n + 4) { border-top: 1px solid var(--line); }
+}

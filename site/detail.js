@@ -15,7 +15,6 @@
     1: "Mixed trend: only one of the two trend tests (price vs. 200-day average, 50-day vs. 200-day) is positive.",
     0: "Downtrend: the price is below its 200-day average and the 50-day average is below the 200-day average.",
   };
-  const RET_KEY = { 5: "ret_5", 10: "ret_10", 21: "ret_21" };
 
   function ago(iso, now) {
     const h = (now - Date.parse(iso)) / 36e5;
@@ -48,7 +47,7 @@
       }
       // 2. Price evidence
       why.push(hz.days
-        ? `<b>Recent strength:</b> return over ${esc(hz.label.toLowerCase())} is ${sp(row[RET_KEY[hz.days]])} (1 week ${sp(row.ret_5)}, 2 weeks ${sp(row.ret_10)}, 1 month ${sp(row.ret_21)}).`
+        ? `<b>Recent strength:</b> return over ${esc(hz.label.toLowerCase())} is ${sp(row[`ret_${hz.days}`])} (1 week ${sp(row.ret_5)}, 2 weeks ${sp(row.ret_10)}, 1 month ${sp(row.ret_21)}, 3 months ${sp(row.ret_63)}, 6 months ${sp(row.ret_126)}).`
         : `<b>Momentum:</b> ${sp(row.mom_12_1, 0)} over the past year (skipping the latest month) and ${sp(row.mom_6_1, 0)} over six months. Stocks that have been winning tend to keep winning for a while.`);
       why.push(`<b>Trend:</b> ${esc(TREND[row.trend] || row.trend_label)}`);
       why.push(`<b>Risk:</b> price swings about ${pc(row.vol_63d)} a year; it is ${!Number.isFinite(row.drawdown_1y) ? "n/a vs. its 1-year high" : row.drawdown_1y > -0.005 ? "at its 1-year high" : pc(-row.drawdown_1y) + " below its 1-year high"}.`);
