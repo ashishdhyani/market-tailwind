@@ -71,9 +71,9 @@ jobs:
 
       - name: Password-protect the site
         # Encrypts everything in site/ into dist/ (see tools/protect.mjs). Fails, and so publishes
-        # nothing, if the SITE_PASSWORD secret is missing or shorter than 12 characters.
+        # nothing, if the MARKET_PASSWORD secret is missing or shorter than 12 characters.
         env:
-          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+          MARKET_PASSWORD: ${{ secrets.MARKET_PASSWORD }}
         run: node tools/protect.mjs site dist
 
       - uses: actions/configure-pages@v5

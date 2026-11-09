@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Password-protects the static site.
  *
- *   SITE_PASSWORD='a long passphrase' node tools/protect.mjs [srcDir=site] [outDir=dist]
+ *   MARKET_PASSWORD='a long passphrase' node tools/protect.mjs [srcDir=site] [outDir=dist]
  *
  * Reads every file in srcDir, compresses and encrypts them into outDir/bundle.enc (AES-256-GCM, key from
  * PBKDF2-SHA256, 600,000 iterations), and writes a small login page to outDir/index.html. Publish outDir,
@@ -63,9 +63,9 @@ export async function decrypt(buf, password) {  // used by tests; the browser ha
 
 async function main() {
   const [src = "site", out = "dist"] = process.argv.slice(2);
-  const password = process.env.SITE_PASSWORD || "";
+  const password = process.env.MARKET_PASSWORD || "";
   if (password.length < MIN_PASSWORD) {
-    console.error(`::error::SITE_PASSWORD is missing or shorter than ${MIN_PASSWORD} characters. Not publishing an unprotected site. `
+    console.error(`::error::MARKET_PASSWORD is missing or shorter than ${MIN_PASSWORD} characters. Not publishing an unprotected site. `
       + "Add it under repo Settings > Secrets and variables > Actions > New repository secret.");
     process.exit(1);
   }

@@ -27,10 +27,10 @@ try {
   assert.notDeepEqual((await encrypt(files, pw)).subarray(4, 16), enc.subarray(4, 16)); pass();
 
   // 4. CLI: fails closed without a (long enough) password, and builds a clean dist/ otherwise
-  const run = (env) => spawnSync("node", [join(root, "tools/protect.mjs"), join(root, "site"), join(work, "dist")], { env: { ...process.env, SITE_PASSWORD: "", ...env }, encoding: "utf8" });
+  const run = (env) => spawnSync("node", [join(root, "tools/protect.mjs"), join(root, "site"), join(work, "dist")], { env: { ...process.env, MARKET_PASSWORD: "", ...env }, encoding: "utf8" });
   assert.equal(run({}).status, 1); pass();
-  assert.equal(run({ SITE_PASSWORD: "short" }).status, 1); pass();
-  const good = run({ SITE_PASSWORD: pw });
+  assert.equal(run({ MARKET_PASSWORD: "short" }).status, 1); pass();
+  const good = run({ MARKET_PASSWORD: pw });
   assert.equal(good.status, 0, good.stderr); pass();
   const bundle = await readFile(join(work, "dist/bundle.enc"));
   assert.deepEqual(await decrypt(bundle, pw), files); pass();
