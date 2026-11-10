@@ -159,12 +159,90 @@
     return (p.summary ? `<p>${esc(p.summary)}</p>` : `<p class="muted">No description came back.</p>`) + (facts.length ? `<p class="muted">${facts.map(esc).join(" · ")}</p>` : "") + (w ? `<p>${link(w, w.replace(/^https?:\/\//, ""))}</p>` : "");
   }
 
+
+  /* ---------- options ---------- */
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const dmy = (iso) => `${+iso.slice(8, 10)} ${MON[+iso.slice(5, 7) - 1]}${iso.slice(0, 4) !== String(new Date().getUTCFullYear()) ? " " + iso.slice(0, 4) : ""}`;
+  const usd = (n) => (isNum(n) ? (n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "K" : "$" + Math.round(n)) : "–");
+  const int = (n) => (isNum(n) ? Math.round(n).toLocaleString("en-US") : "–");
+  const card = (label, value, sub, meaning, extra = "") => `<div class="lk-card"><span class="lk-card-l">${esc(label)}</span><b class="lk-card-v">${value}</b><span class="lk-card-s">${sub}</span>${extra}<p class="lk-card-m">${meaning}</p></div>`;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+  function optionsBlock(rep, A) {
+    const o = A.options;
+    if (!rep.options) return `<p class="muted">Yahoo lists no options for this symbol. That is normal for many non-US stocks, thinly traded names and some funds.</p>`;
+    if (!o) return `<p class="muted">Options data came back but there were no recent trades to analyse.</p>`;
+    const cur = rep.profile.currency, h = o.headline, iv = o.iv, pcr = o.pc, un = o.unusual, etf = rep.profile.type === "ETF" || rep.info.type === "ETF";
+    const cards = [];
+
+    // 1. expected move
+    if (h) {
+      const bar = `<div class="lk-range" aria-hidden="true"><span class="lk-band"></span><i class="lk-mark"></i></div><div class="lk-range-l"><span>${esc(px(h.low, cur))}</span><span>now ${esc(px(o.spot, cur))}</span><span>${esc(px(h.high, cur))}</span></div>`;
+      cards.push(card("Expected move", `±${pc(h.movePct, 1)}`, `by ${esc(dmy(h.date))} (${Math.round(h.days)} days)`,
+        `Options prices imply roughly a 2 in 3 chance the stock finishes between ${esc(px(h.low, cur))} and ${esc(px(h.high, cur))} by then. About 1 time in 3 it ends outside that range, up or down. It is a size of move, not a direction.`, bar));
+    } else cards.push(card("Expected move", "–", "not available", "There were no recent trades near today's price to work this out."));
+
+    // 2. implied volatility
+    if (iv) {
+      const w = iv.ratio === null ? "" : { high: "Options are priced for bigger swings than the stock has recently made: traders are paying up, often ahead of news or because they fear a fall.", low: "Options are priced for smaller swings than the stock has recently made: traders are not paying much for protection.", "in line": "Options are priced in line with how much the stock has actually been moving." }[iv.word];
+      cards.push(card("Implied volatility", pc(iv.value, 0) + " a year", iv.realized ? `stock's actual swings, last 3 months: ${pc(iv.realized, 0)}` : "no recent swing figure to compare",
+        `How big a yearly swing options traders are pricing in (higher means pricier options). ${esc(w)}`));
+    } else cards.push(card("Implied volatility", "–", "not available", "No usable option prices to work it out."));
+
+    // 3. put/call ratio
+    if (pcr.volRatio !== null) {
+      const pos = clamp(pcr.volRatio / 2, 0, 1) * 100;
+      const meter = `<div class="lk-meter" aria-hidden="true"><span class="lk-zone" style="left:${(etf ? 0.7 : 0.45) / 2 * 100}%;width:${((etf ? 1.2 : 0.9) - (etf ? 0.7 : 0.45)) / 2 * 100}%"></span><i style="left:${pos.toFixed(1)}%"></i></div><div class="lk-range-l"><span>more calls</span><span>more puts</span></div>`;
+      cards.push(card("Put/call ratio", pcr.volRatio.toFixed(2), `${int(pcr.putVol)} puts vs ${int(pcr.callVol)} calls traded`,
+        `${esc(pcr.word.charAt(0).toUpperCase() + pcr.word.slice(1))}. ${etf ? "Funds are often hedged with puts, so 0.7 to 1.2 is normal" : "For most stocks 0.45 to 0.9 is normal, so calls outnumbering puts is usual"}. Compare it with this stock's own usual level: a change matters more than the number.${pcr.thin ? " Very little traded, so treat it as noise." : ""}`, meter));
+    } else cards.push(card("Put/call ratio", "–", "no calls traded", "Not enough trading in the latest session."));
+
+    // 4. unusual activity
+    cards.push(card("Unusual activity", un.total ? `${un.total} contract${un.total === 1 ? "" : "s"}` : "None", un.total ? `${un.calls} call, ${un.puts} put` : "nothing stands out",
+      un.total ? `Contracts where one day's trading was at least as big as everything already open on them, so many new positions were opened. It does not say whether people were buying or selling, or why.` : `No contract traded at least as many as were already open (with $${(50000).toLocaleString("en-US")}+ changing hands).`));
+
+    // plain-words summary
+    const says = [];
+    if (h) says.push(`Options traders are pricing in a move of about <b>±${pc(h.movePct, 1)}</b> over the next ${Math.round(h.days)} days.`);
+    if (o.earnings && o.earnings.jumpPct !== null) says.push(`Around the earnings date (${esc(dmy(o.earnings.date))}) they seem to expect an extra jump of roughly <b>±${pc(o.earnings.jumpPct, 0)}</b> in a day (a rough estimate).`);
+    else if (o.earnings) says.push(`Earnings are due around ${esc(dmy(o.earnings.date))}, and the expiry just after it (${esc(dmy(o.earnings.expiry))}) prices a move of about ±${pc(o.earnings.totalMovePct, 0)} up to that date.`);
+    if (iv && iv.ratio !== null && iv.word !== "in line") says.push(`Options are <b>${iv.word === "high" ? "expensive" : "cheap"}</b> compared with the stock's recent swings (${pc(iv.value, 0)} vs ${pc(iv.realized, 0)}).`);
+    if (iv && iv.term === "inverted") says.push(`Near-term options cost more than later ones (${pc(iv.near, 0)} vs ${pc(iv.far, 0)}): the market is nervous about something soon.`);
+    if (o.skew && o.skew.word === "puts pricier") says.push(`Downside protection costs more than upside bets (a put ${pc(1 - o.skew.putStrike / o.spot, 0)} below the price is priced about ${(o.skew.value * 100).toFixed(0)} points higher in volatility than a call ${pc(o.skew.callStrike / o.spot - 1, 0)} above). That is normal for stocks and funds, and bigger values mean more worry about falls.`);
+    else if (o.skew && o.skew.word === "calls pricier") says.push(`Upside bets cost more than downside protection, which is unusual and often shows up in hyped stocks.`);
+    if (pcr.volRatio !== null && !pcr.thin) says.push(`Call buyers and sellers cannot be told apart in this data, so heavy call trading is <b>not</b> proof that traders expect a rise.`);
+
+    // tables
+    const exp = o.expiries.filter((r) => r.iv).slice(0, 10);
+    const expTable = exp.length ? `<h4>Expected move by expiry</h4>` + table(["Expiry", "Days", "Move ±", "Range", "Volatility"], exp.map((r) => tr([dmy(r.date) + (r.earnings ? " ★" : ""), String(Math.round(r.days)), pc(r.movePct, 1), `${px(r.low, cur)} – ${px(r.high, cur)}`, pc(r.iv, 0)])))
+      + (exp.some((r) => r.earnings) ? `<p class="muted">★ the expiry is after the next earnings date, so its move includes the earnings reaction.</p>` : "") : "";
+    const unTable = un.rows.length ? `<h4>Largest unusual trades</h4>` + table(["Contract", "Traded", "Already open", "Money", "How far out"], un.rows.map((u) => tr([`${u.type === "call" ? "Call" : "Put"} ${px(u.strike, cur)} · ${dmy(u.expiry)}`, int(u.vol), int(u.oi), usd(u.premium),
+      (u.otmPct > 0 ? pc(u.otmPct, 0) + " out of the money" : u.otmPct < -0.005 ? pc(-u.otmPct, 0) + " in the money" : "at the money") + (u.lottery ? " · lottery-ticket style" : "")])))
+      + `<p class="muted">A call pays off if the stock rises past its strike; a put pays off if it falls below. "Money" is volume × last price × 100 shares: an estimate of what changed hands. ${un.total > un.rows.length ? `${un.total - un.rows.length} smaller ones not shown. ` : ""}Each trade has a buyer and a seller, so this cannot show which side was the aggressor.</p>` : "";
+    const wallRows = (side, label) => o.walls[side].top.map((w) => tr([`${label} ${px(w.strike, cur)}`, int(w.oi), pc(w.share, 0), (w.distPct >= 0 ? "+" : "") + pc(w.distPct, 1)]));
+    const walls = (o.walls.calls.top.length || o.walls.puts.top.length) ? `<h4>Where the most contracts are open (next 60 days)</h4>` + table(["Strike", "Open contracts", "Share", "From price"], [...wallRows("calls", "Call"), ...wallRows("puts", "Put")])
+      + `<p class="muted">Strikes with the most contracts open. Prices sometimes gravitate toward them near expiry because of hedging by dealers; this is a tendency, not a rule.</p>` : "";
+    const money = pcr.callPremium + pcr.putPremium > 0 ? `<p>Money changing hands in the latest session (rough): <b>${usd(pcr.callPremium)}</b> in calls, <b>${usd(pcr.putPremium)}</b> in puts, across ${pcr.expiries} expiries. Open contracts: ${int(pcr.callOI)} calls and ${int(pcr.putOI)} puts${pcr.oiRatio ? ` (put/call ${pcr.oiRatio.toFixed(2)})` : ""}.</p>` : "";
+
+    const how = `<details class="legend"><summary>How to read options, and what this cannot tell you</summary><dl>
+      <dt>Call and put</dt><dd>A call gains if the stock rises; a put gains if it falls. Whoever buys one, someone else sells it.</dd>
+      <dt>Expected move</dt><dd>Taken from option prices (the price of an option rises with the swings traders expect). Roughly 2 in 3 outcomes land inside the range. Real moves can be bigger.</dd>
+      <dt>Implied volatility</dt><dd>The yearly swing size built into option prices. It usually sits a bit above actual swings, because people pay for protection. It jumps before earnings and in scary markets.</dd>
+      <dt>Put/call ratio</dt><dd>Puts traded divided by calls traded. Many puts can be hedges by people who own the stock, and many calls can be covered-call sellers. It is a mood gauge, not a forecast.</dd>
+      <dt>Unusual activity</dt><dd>Volume bigger than the contracts already open. It flags where attention is, but buyer versus seller is unknown, so the direction is unknown too.</dd>
+      <dt>Can big call buying predict a rise?</dt><dd>Not reliably. Studies find small, short-lived signals at best, and only when the trades are known to be opening buys, which this free data does not show.</dd></dl></details>`;
+
+    const how2 = `<p class="muted">Estimated by this page from option prices (${o.quotesLive ? "live quotes" : "last traded prices from " + esc(dmy(o.session))}), with a 4% interest rate and no dividends, so small differences from a broker's figures are normal. Research information, not advice.</p>`;
+    const notes = o.notes.length ? `<ul class="lk-notes">${o.notes.map((n) => `<li class="muted">${esc(n)}</li>`).join("")}</ul>` : "";
+    return `<div class="lk-cards">${cards.join("")}</div>${says.length ? `<h4>In plain words</h4><ul class="lk-list">${says.map((x) => `<li>${x}</li>`).join("")}</ul>` : ""}${notes}${expTable}${unTable}${walls}${money}${how}${how2}`;
+  }
+
   /* rep: sanitised report (found); A: analysis. Returns HTML. */
   function reportHtml(rep, A, now = Date.now()) {
     const etf = rep.profile.type === "ETF" || rep.info.type === "ETF";
     const missing = Object.keys(rep.errors || {});
     const stamp = `<p class="muted">Fetched ${esc(rep.fetched || "")} from Yahoo Finance${missing.length ? `. Not available for this symbol: ${missing.map(esc).join(", ")}` : ""}. Yahoo's data can be wrong or delayed.</p>`;
-    return header(rep, A, now) + sec("Points in its favour and of caution", checksBlock(A)) + sec("Price and momentum", priceBlock(rep, A))
+    return header(rep, A, now) + sec("Points in its favour and of caution", checksBlock(A)) + sec("Price and momentum", priceBlock(rep, A)) + sec("Options: what traders are pricing in", optionsBlock(rep, A))
       + sec(etf ? "Fund numbers" : "Key numbers", metricsBlock(rep, A)) + (etf ? "" : sec("Financial statements", financialsBlock(rep, A), false) + sec("Analysts", analystsBlock(rep, A), false) + sec("Earnings", earningsBlock(rep, A), false))
       + sec("Dividends", dividendsBlock(rep, A), false) + (etf ? "" : sec("Insiders and big holders", peopleBlock(rep, A), false)) + sec("News", newsBlock(rep, A, now), false) + sec("About", aboutBlock(rep), false) + stamp
       + `<p class="muted">Research tool, not financial advice. Do your own research before acting on any idea.</p>`;

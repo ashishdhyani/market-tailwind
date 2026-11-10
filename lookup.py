@@ -12,7 +12,7 @@ import math
 import re
 import sys
 import warnings
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import yfinance as yf
@@ -87,6 +87,45 @@ def section(errors, name, fn, default=None):
     except Exception as exc:  # a missing section must never sink the whole report
         errors[name] = f"{type(exc).__name__}: {str(exc)[:120]}"
         return default
+
+
+OPTION_DAYS = 120          # expiries up to about four months out, plus one far one for the term structure
+MAX_EXPIRIES = 10
+STRIKE_BAND = (0.4, 1.6)   # keep strikes within 40% below to 60% above the price; the rest is noise
+
+
+def contract_rows(frame, lo, hi):
+    """Compact rows [strike, last, bid, ask, volume, open interest, implied vol, last trade date] for contracts worth keeping."""
+    rows = []
+    for _, r in frame.iterrows():
+        k = num(r.get("strike"))
+        if k is None or not lo <= k <= hi:
+            continue
+        vol, oi = num(r.get("volume")), num(r.get("openInterest"))
+        if not (vol or oi):
+            continue                                   # nobody has traded it and nobody holds it
+        rows.append([k, num(r.get("lastPrice"), 5), num(r.get("bid"), 5), num(r.get("ask"), 5), vol, oi, num(r.get("impliedVolatility"), 4), iso(r.get("lastTradeDate"))])
+    return rows
+
+
+def options_chains(t, spot, today):
+    """Listed options for the nearest expiries. Raw per-contract rows only: the page does the analysis (see site/lookup_options.js)."""
+    dates = list(t.options or [])
+    if not dates:
+        return None
+    near = [d for d in dates if 0 <= (date.fromisoformat(d) - today).days <= OPTION_DAYS][:MAX_EXPIRIES - 1]
+    far = [d for d in dates if (date.fromisoformat(d) - today).days >= 150][:1]
+    lo, hi = spot * STRIKE_BAND[0], spot * STRIKE_BAND[1]
+    expiries = []
+    for d in near + far:
+        try:
+            ch = t.option_chain(d)
+        except Exception:
+            continue                                   # one bad expiry should not lose the rest
+        calls, puts = contract_rows(ch.calls, lo, hi), contract_rows(ch.puts, lo, hi)
+        if calls or puts:
+            expiries.append({"date": d, "calls": calls, "puts": puts})
+    return {"spot": num(spot, 6), "expiries": expiries} if expiries else None
 
 
 def build(symbol: str) -> dict:
@@ -182,6 +221,7 @@ def build(symbol: str) -> dict:
                           "summary": text(feeds.clean_summary(a["summary"]), 260), "score": round(sentiment.score(f"{a['title']}. {feeds.clean_summary(a['summary'], 2000)}"), 3)})
         return items
     out["news"] = section(errors, "news", news, [])
+    out["options"] = section(errors, "options", lambda: options_chains(t, float(hist["Close"].iloc[-1]), now.date()), None)
     return out
 
 

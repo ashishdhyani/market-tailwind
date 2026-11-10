@@ -323,3 +323,17 @@ td.earn.soon { color: var(--neg); font-weight: 700; }
 .lk-table td:first-child, .lk-table th:first-child { white-space: normal; min-width: 8.5em; }
 .lk-kv { margin: 10px 0 4px; } .lk-kv th { text-align: left; font-weight: 500; color: var(--muted); padding: 3px 12px 3px 0; width: 48%; vertical-align: top; } .lk-kv td { padding: 3px 0; text-align: left; }
 .how summary { cursor: pointer; color: var(--accent); font-size: .86rem; margin: 0 0 6px; }
+
+/* Lookup: options cards */
+.lk-cards { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 4px 0 8px; }
+@media (min-width: 640px) { .lk-cards { grid-template-columns: 1fr 1fr; } }
+.lk-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; }
+.lk-card-l { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.lk-card-v { font-size: 1.5rem; line-height: 1.15; } .lk-card-s { font-size: .82rem; color: var(--muted); }
+.lk-card-m { margin: 6px 0 0; font-size: .84rem; line-height: 1.4; }
+.lk-range, .lk-meter { position: relative; height: 8px; border-radius: 4px; background: var(--line); margin: 8px 0 2px; }
+.lk-band { position: absolute; left: 0; width: 100%; top: 0; bottom: 0; background: var(--accent); opacity: .55; border-radius: 4px; }
+.lk-mark { position: absolute; left: 50%; top: -3px; width: 2px; height: 14px; background: var(--text); }
+.lk-zone { position: absolute; top: 0; bottom: 0; background: var(--accent); opacity: .45; border-radius: 4px; }
+.lk-meter i { position: absolute; top: -3px; width: 12px; height: 14px; margin-left: -6px; border-radius: 3px; background: var(--text); }
+.lk-range-l { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }

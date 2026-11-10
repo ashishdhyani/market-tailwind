@@ -54,6 +54,36 @@ for n in ["SOFI", "TSM", "QQQM"]:
     check(len(p["dates"]) == len(p["close"]) == len(p["volume"]) > 1000 and p["dates"] == sorted(set(p["dates"])), f"{n} prices aligned and ascending")
     check(all(isinstance(v, float) and v > 0 for v in p["close"]), f"{n} closes positive")
     check(len(raw) < 200_000, f"{n} small enough to serve quickly")
+# options: contract rows and chain selection
+frame = pd.DataFrame({"strike": [5.0, 90.0, 100.0, 110.0, 400.0, 100.0], "lastPrice": [1, 12, 5, 1.5, 0.1, 4], "bid": [0, 11.5, 4.9, 1.4, 0, 0], "ask": [0, 12.5, 5.1, 1.6, 0, 0],
+                      "volume": [10, 5, float("nan"), 0, 50, 7], "openInterest": [1, 0, 300, 0, 9, float("nan")], "impliedVolatility": [0.5] * 6,
+                      "lastTradeDate": [pd.Timestamp("2026-11-09", tz="UTC")] * 6})
+rows = K.contract_rows(frame, 40.0, 160.0)
+check([r[0] for r in rows] == [90.0, 100.0, 100.0], f"strikes outside the band and contracts nobody trades or holds are dropped: {[r[0] for r in rows]}")
+check(rows[0] == [90.0, 12.0, 11.5, 12.5, 5.0, 0.0, 0.5, "2026-11-09"], "row layout: strike, last, bid, ask, volume, open interest, iv, date")
+check(rows[1][4] is None and rows[1][5] == 300.0 and rows[2][5] is None, "NaN volume/open interest become None")
+check(all(len(r) == 8 for r in rows), "eight fields per row")
+
+class FakeChain:
+    def __init__(self, c, p): self.calls, self.puts = c, p
+class FakeTicker:
+    def __init__(self, dates, fail=()): self.options, self.fail = dates, fail
+    def option_chain(self, d):
+        if d in self.fail: raise RuntimeError("boom")
+        return FakeChain(frame, frame)
+from datetime import date as _d
+today = _d(2026, 11, 9)
+check(K.options_chains(FakeTicker(()), 100.0, today) is None, "no listed options -> None")
+res = K.options_chains(FakeTicker(("2026-11-13", "2026-12-18", "2027-06-18")), 100.0, today)
+check([e["date"] for e in res["expiries"]] == ["2026-11-13", "2026-12-18", "2027-06-18"] and res["spot"] == 100.0, "near expiries plus one far one kept")
+res = K.options_chains(FakeTicker(("2026-11-13", "2026-12-18"), fail=("2026-11-13",)), 100.0, today)
+check([e["date"] for e in res["expiries"]] == ["2026-12-18"], "a failing expiry is skipped, the rest kept")
+many = tuple((_d(2026, 11, 10) + __import__("datetime").timedelta(days=i)).isoformat() for i in range(60))
+check(len(K.options_chains(FakeTicker(many), 100.0, today)["expiries"]) == K.MAX_EXPIRIES - 1, "expiry count capped")
+for n in ["SOFI", "TSM", "QQQM"]:
+    o = json.loads((fx / f"lookup_{n}_.json").read_text())["options"]
+    check(o and o["spot"] > 0 and len(o["expiries"]) >= 3 and all(len(r) == 8 for e in o["expiries"] for r in e["calls"] + e["puts"]), f"{n} options shape")
+    check(any((r[4] or 0) > 0 for e in o["expiries"] for r in e["calls"]), f"{n} has traded contracts")
 check(json.loads((fx / "lookup_TSM_.json").read_text())["profile"]["financial_currency"] == "TWD", "ADR reporting currency captured")
 nf = json.loads((fx / "lookup_BADSYM123_.json").read_text())
 check(nf["found"] is False and "prices" not in nf, "not-found result is tiny and flagged")

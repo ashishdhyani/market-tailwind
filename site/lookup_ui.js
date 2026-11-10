@@ -126,13 +126,18 @@
     const symbol = L.cleanSymbol(raw);
     if (!symbol) { msg("That does not look like a ticker symbol. Examples: SOFI, TSM, QQQM, D05.SI, 0700.HK, BRK-B.", "err"); return; }
     $("lk-symbol").value = symbol;
+    if (symbol !== current) { $("lk-report").innerHTML = ""; current = null; }     // never leave another symbol's report under this one's name
     setBusy(true); showToken(false); msg(`Looking for a saved report on ${symbol}…`);
     try {
       let saved = null;
       try { saved = await getJson(`${rawBase()}/data/${symbol}.json`); } catch { /* offline: fall through */ }
       const savedOk = saved ? L.sanitize(saved) : null;
       const fresh = savedOk && savedOk.report && savedOk.report.found && L.isFresh(savedOk.report);
-      if (saved && (mode === "cached" || (mode === "auto" && fresh))) { show(saved); return; }
+      if (saved && (mode === "cached" || mode === "peek" || (mode === "auto" && fresh))) { show(saved); return; }
+      if (mode === "peek") {            // opened from Holdings: never start a public lookup without an explicit press of "Look up"
+        msg(`${symbol} has not been looked up yet. Press "Look up" to fetch it. That saves the symbol on this repository's public lookups branch, so anyone could see it was looked up.`);
+        return;
+      }
       if (!gh().store.get()) {
         pending = symbol;
         if (saved) show(saved, { note: "To fetch a newer one, add a GitHub token below." });
@@ -169,6 +174,8 @@
   window.LookupUI = {
     init(h) { host = h; },
     render() { if (!host || !gh()) return; bind(); loadRecent(false); },
+    /* From Holdings: show a saved report if there is one, otherwise wait for the user to press Look up. */
+    open(symbol) { if (!host || !gh()) return; bind(); loadRecent(false); lookup(symbol, "peek"); },
     // exposed for tests
     _lookup: lookup, _ageText: ageText,
   };

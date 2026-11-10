@@ -6,6 +6,7 @@
   "use strict";
   const E = typeof require !== "undefined" ? require("./engine.js") : root.Engine;
   const F = typeof require !== "undefined" ? require("./fundamentals.js") : root.Fundamentals;
+  const O = typeof require !== "undefined" ? require("./lookup_options.js") : root.LookupOptions;
 
   const SYMBOL_RE = /^[A-Z0-9][A-Z0-9.\-]{0,11}$/;
   const FRESH_HOURS = 6;
@@ -77,6 +78,7 @@
         estimates: { eps: est(obj(an.estimates).eps), revenue: est(obj(an.estimates).revenue) },
       },
       earnings: { history: arr(obj(raw.earnings).history, 10).map((r) => ({ date: dt(obj(r).date), ...pick(r, nums("estimate", "actual", "surprise_pct")) })) },
+      options: O.sanitize(raw.options),
       holders: { top: arr(obj(raw.holders).top, 12).map((r) => ({ holder: st(obj(r).holder, 70), ...pick(r, nums("pct", "shares", "value", "change")) })) },
       insiders: arr(raw.insiders, 15).map((r) => ({ date: dt(obj(r).date), insider: st(obj(r).insider, 50), position: st(obj(r).position, 40), text: st(obj(r).text, 120), shares: nm(obj(r).shares), value: nm(obj(r).value) })),
       news: arr(raw.news, 20).filter((n) => st(obj(n).title)).map((n) => ({ title: st(n.title, 200), url: url(n.url), time: typeof n.time === "string" && !Number.isNaN(Date.parse(n.time)) ? n.time : null,
@@ -289,6 +291,8 @@
     const A = {currencyMismatch: mismatch,  stats, rel: relative(rep.prices, ctx.spy), pct: percentiles(stats, ctx.universe), trends: trends(rep.financials), analysts: analystView(rep, stats.price), earnings: earningsView(rep),
       insiders: insiderView(rep), dividends: dividendView(rep, stats.price, stats.asOf), news: newsView(rep), events: F.events(rep.info, now), inApp: ctx.inApp || null,
       fundamentals: rep.info.type === "ETF" ? null : F.evaluate(evalInfo, stats.price) };
+    const closeOn = new Map(rep.prices.dates.map((d, i) => [d, rep.prices.close[i]]));
+    A.options = O.analyze(rep.options, { spotOn: (d) => closeOn.get(d) || null, spot: stats.price, earnings: rep.info.next_earnings || null, realizedVol: stats.vol_63d, isEtf: rep.info.type === "ETF" || rep.profile.type === "ETF" });
     A.checks = checks(rep, A, now);
     A.ev = F.evaluate(evalInfo, stats.price);
     return A;

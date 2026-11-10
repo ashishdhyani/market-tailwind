@@ -506,7 +506,8 @@
     const s = signalFor({ t });   // any ticker: used by Holdings and Pullbacks
     const row = s.row ? (s.wrow ? { ...s.row, score: s.wrow.score } : s.row) : null;
     return D.buildDetail({ ticker: t, info: s.info, price: row ? row.price : null, row, horizon: state.horizon, mode: "holding",
-      rank: s.wrow ? s.rank : undefined, sector: s.sc.sector, news: s.news, now: Date.now() });
+      rank: s.wrow ? s.rank : undefined, sector: s.sc.sector, news: s.news, now: Date.now() })
+      + `<p><button type="button" class="btn alt" data-lookup="${esc(t)}">Options and full report →</button></p>`;
   }
 
   const money = (v, c) => (c === "SGD" ? "S$" : "$") + Math.round(v).toLocaleString("en-US");
@@ -523,6 +524,14 @@
   }
 
   function bindHoldings() {
+    // "Options and full report" buttons (Holdings and Pullbacks details) open the Lookup tab for that symbol.
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-lookup]");
+      if (!b) return;
+      e.preventDefault();
+      state.tab = "look"; render(); window.scrollTo(0, 0);
+      window.LookupUI.open(b.dataset.lookup);
+    });
     $("hold-save").onclick = () => saveFromText($("hold-text").value);
     $("hold-file").onchange = async (e) => {
       const f = e.target.files && e.target.files[0];
